@@ -57,6 +57,7 @@ def generate_upi_qr(upi_id, amount):
 @bot.message_handler(commands=['gen'])
 def generate_link(message):
     if message.from_user.id != ADMIN_ID:
+        
         return  # Sirf admin access
         
     args = message.text.split()
@@ -71,7 +72,7 @@ def generate_link(message):
     
     # Database me save karein (Permanent Storage)
     conn = sqlite3.connect('bot_data.db')
-    cursor = conn.conn.cursor() if hasattr(conn, 'conn') else conn.cursor()
+    cursor = conn.cursor()
     cursor.execute('INSERT INTO links (token, amount) VALUES (?, ?)', (unique_token, amount))
     conn.commit()
     conn.close()
