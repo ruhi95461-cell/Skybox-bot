@@ -5,12 +5,19 @@ import io
 import time
 import secrets
 import sqlite3
-
+from flask import Flask
+import threading
+app = Flask('')
+@app.route('/')
+def home(): return "Bot is Alive"
+def run_flask(): app.run(host='0.0.0.0', port=80)
+    
 # ==================== CONFIGURATION ====================
 BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"  # BotFather ka token yahan dalein
 ADMIN_ID = 123456789  # Apni real numeric Telegram Admin ID dalein
 YOUR_UPI_ID = "BHARATPE.8B0Q0G6C4W79292@fbpe"
 BOT_USERNAME = "SkyBoxx_bot"
+
 # =======================================================
 
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -170,5 +177,8 @@ def verify_and_log_utr(message, amount):
     except Exception:
         bot.send_message(message.chat.id, "Payment Not Received ❌\nPlease Try Again..")
 
-print("SkyBoxx_bot running with permanent DB configuration...")
-bot.infinity_polling()
+if __name__ == '__main__':
+    init_db()
+    threading.Thread(target=run_flask).start()
+    print("SkyBoxx_bot running on free tier...")
+    bot.infinity_polling()
