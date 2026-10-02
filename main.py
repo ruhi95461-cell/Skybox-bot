@@ -16,7 +16,7 @@ def run_flask():
     app.run(host='0.0.0.0', port=8000)
     
 # ==================== CONFIGURATION ====================
-BOT_TOKEN = "8963839676:AAGjIdGFb33oM0yAgyvlZRg1AHMDehD6oGc"  # BotFather ka token yahan dalein
+BOT_TOKEN = "8963839676:AAGGANKNDqW9gyrmRd2c4dbN4JONCo7hzz4"
 ADMIN_ID = 8393210427  # Apni real numeric Telegram Admin ID dalein
 YOUR_UPI_ID = "BHARATPE.8B0Q0G6C4W79292@fbpe"
 BOT_USERNAME = "SkyBoxx_bot"
