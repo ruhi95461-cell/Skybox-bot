@@ -17,8 +17,8 @@ def run_flask():
     
 # ==================== CONFIGURATION ====================
 BOT_TOKEN = "8963839676:AAGGANKNDqW9gyrmRd2c4dbN4JONCo7hzz4"
-ADMIN_ID = 8393210427  # Apni real numeric Telegram Admin ID dalein
-YOUR_UPI_ID = "BHARATPE.8B0Q0G6C4W79292@fbpe"
+ADMIN_ID = 8393210427  
+YOUR_UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
 BOT_USERNAME = "SkyBoxx_bot"
 
 # =======================================================
@@ -168,7 +168,7 @@ def verify_and_log_utr(message, amount):
         print(f"Admin log failed: {e}")
 
     # User Processing Status
-    verifying_msg = bot.reply_to(message, "🔄 _payment ya transaction verifying..._", parse_mode="Markdown")
+    verifying_msg = bot.reply_to(message, "🔄 _Verifying the UTR, please wait...._", parse_mode="Markdown")
     
     time.sleep(7) # 7 second delay
     
