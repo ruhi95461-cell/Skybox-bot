@@ -9,8 +9,11 @@ from flask import Flask
 import threading
 app = Flask('')
 @app.route('/')
-def home(): return "Bot is Alive"
-def run_flask(): app.run(host='0.0.0.0', port=80)
+def home():
+    return "Bot is Alive"
+
+def run_flask():
+    app.run(host='0.0.0.0', port=8000)
     
 # ==================== CONFIGURATION ====================
 BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"  # BotFather ka token yahan dalein
