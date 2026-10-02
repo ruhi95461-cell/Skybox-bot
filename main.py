@@ -16,8 +16,8 @@ def run_flask():
     app.run(host='0.0.0.0', port=8000)
     
 # ==================== CONFIGURATION ====================
-BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"  # BotFather ka token yahan dalein
-ADMIN_ID = 123456789  # Apni real numeric Telegram Admin ID dalein
+BOT_TOKEN = "8963839676:AAGjIdGFb33oM0yAgyvlZRg1AHMDehD6oGc"  # BotFather ka token yahan dalein
+ADMIN_ID = 8393210427  # Apni real numeric Telegram Admin ID dalein
 YOUR_UPI_ID = "BHARATPE.8B0Q0G6C4W79292@fbpe"
 BOT_USERNAME = "SkyBoxx_bot"
 
@@ -80,7 +80,7 @@ def generate_link(message):
     conn.commit()
     conn.close()
     
-    link = f"https://t.me{BOT_USERNAME}?start=resell_{unique_token}"
+    link = f"https://t.me/{BOT_USERNAME}?start=resell_{unique_token}"
     bot.reply_to(message, f"✅ *Permanent Link Generated for ₹{amount}:*\n\n`{link}`", parse_mode="Markdown")
 
 # --- USER COMMAND: Jab koi permanent link open karega ---
