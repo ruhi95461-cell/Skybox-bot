@@ -136,37 +136,7 @@ def process_utr(message, amount):
         f"🧾 *Transaction ID (UTR):* `{utr}`"
     )
     
-    markup = telebot.types.InlineKeyboardMarkup()
-    approve_btn = telebot.types.InlineKeyboardButton("✅ Approve", callback_data=f"app_{message.from_user.id}_{amount}_{utr}")
-    reject_btn = telebot.types.InlineKeyboardButton("❌ Reject", callback_data=f"rej_{message.from_user.id}_{utr}")
-    markup.add(approve_btn, reject_btn)
-    
-    # Admin ko message chala jayega
-    bot.send_message(ADMIN_ID, admin_caption, reply_markup=markup, parse_mode="Markdown")
-
-# --- ADMIN CALLBACK: Approve / Reject Actions ---
-@bot.callback_query_handler(func=lambda call: call.data.startswith('app_') or call.data.startswith('rej_'))
-def handle_admin_action(call):
-    if call.from_user.id != ADMIN_ID:
-        return
-    data = call.data.split('_')
-    action = data[0]
-    user_id = int(data[1])
-    
-    if action == 'app':
-        amount = data[2]
-        utr = data[3]
-        bot.send_message(user_id, f"✅ *Aapka payment ₹{amount} successfully approve ho gaya hai!*", parse_mode="Markdown")
-        bot.edit_message_text(f"✅ Approved\nUser ID: `{user_id}`\nAmount: ₹{amount}\nUTR: `{utr}`", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
-    elif action == 'rej':
-        utr = data[2]
-        bot.send_message(user_id, "❌ *Aapka payment reject kar diya gaya hai. Kripya sahi UTR check karein.*", parse_mode="Markdown")
-        bot.edit_message_text(f"❌ Rejected\nUser ID: `{user_id}`\nUTR: `{utr}`", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
-        
-    try:
-        bot.answer_callback_query(call.id)
-    except Exception:
-        pass
+    bot.send_message(ADMIN_ID, admin_caption, parse_mode="Markdown")
 
 if __name__ == '__main__':
     bot.infinity_polling()
