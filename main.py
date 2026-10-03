@@ -30,9 +30,6 @@ def init_db():
     conn = sqlite3.connect('bot_data.db')
     cursor = conn.cursor()
     
-    # ⬇️ YEH LINE ADD KAREIN: Purani INTEGER wali table ko delete karne ke liye
-    cursor.execute('DROP TABLE IF EXISTS links')
-    
     # Ab nayi REAL wali table fresh banegi
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS links (
