@@ -16,7 +16,7 @@ BOT_USERNAME = "SkyBoxx_bot"
 
 # --- GITHUB AUTO-UPDATER CONFIG ---
 # ⚠️ Yahan aapna ghp_ wala token aur sahi details daalna
-GITHUB_TOKEN = "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"  # Apna ghp_... wala token yahan paste karein
+GITHUB_TOKEN = os.environ.get("GH_TOKEN")
 REPO_OWNER = "ruhi95461-cell"
 REPO_NAME = "Skybox-bot"
 FILE_PATH = "main.py"
