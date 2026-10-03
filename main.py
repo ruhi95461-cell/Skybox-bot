@@ -75,7 +75,7 @@ def generate_link(message):
         return
 
     try:
-        conn = pg8000.native.Connection(dsn=DB_URL)
+        conn = pg8000.native.Connection(user="postgres.rflsxmqxlvwfguwdcuvh", password="Skymoon6507@db", host="://supabase.com", port=6543, database="postgres")
         existing = conn.run('SELECT token FROM links WHERE amount = :1', amount)
         
         if existing and len(existing) > 0:
@@ -87,7 +87,7 @@ def generate_link(message):
         conn.run('INSERT INTO links (token, amount) VALUES (:1, :2)', unique_token, amount)
         conn.close()
 
-        link = f"https://t.me{BOT_USERNAME}?start=resell_{unique_token}"
+        link = f"https://t.me/{BOT_USERNAME}?start=resell_{unique_token}"
         bot.reply_to(message, f"✅ *Link Generated:*\n\n`{link}`", parse_mode="Markdown")
     except Exception as e:
         bot.reply_to(message, f"❌ Database error: {str(e)}")
@@ -101,7 +101,7 @@ def handle_start(message):
     token = text_args[1].replace("resell_", "")
     
     try:
-        conn = pg8000.native.Connection(dsn=DB_URL)
+        conn = pg8000.native.Connection(user="postgres.rflsxmqxlvwfguwdcuvh", password="Skymoon6507@db", host="://supabase.com", port=6543, database="postgres")
         row = conn.run('SELECT amount FROM links WHERE token = :1', token)
         conn.close()
         
