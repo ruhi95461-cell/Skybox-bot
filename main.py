@@ -4,7 +4,7 @@ import qrcode
 import io
 import time
 import secrets
-import sqlite3
+import psycopg2
 from flask import Flask
 import threading
 app = Flask('')
@@ -25,16 +25,18 @@ BOT_USERNAME = "SkyBoxx_bot"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
+DB_URL = "postgresql://postgres:Skymoon6507@@db.rflsxmqxlvwfguwdcuvh.supabase.co:5432/postgres"
+
 # --- DATABASE SETUP ---
 def init_db():
-    conn = sqlite3.connect('bot_data.db')
+    conn = psycopg2.connect(DB_URL)
     cursor = conn.cursor()
     
-    # Ab nayi REAL wali table fresh banegi
+    # Nayi table fresh banegi PostgreSQL format mein
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS links (
         token TEXT PRIMARY KEY,
-        amount REAL UNIQUE
+        amount NUMERIC UNIQUE
     )
     ''')
     conn.commit()
