@@ -26,16 +26,19 @@ BOT_USERNAME = "SkyBoxx_bot"
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # --- DATABASE SETUP ---
-# Database file create aur initialize karne ka function
 def init_db():
     conn = sqlite3.connect('bot_data.db')
     cursor = conn.cursor()
-    # Links table: Agar bot restart bhi ho jaye, data safe rahega
+    
+    # ⬇️ YEH LINE ADD KAREIN: Purani INTEGER wali table ko delete karne ke liye
+    cursor.execute('DROP TABLE IF EXISTS links')
+    
+    # Ab nayi REAL wali table fresh banegi
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS links (
-            token TEXT PRIMARY KEY,
-            amount INTEGER UNIQUE
-        )
+    CREATE TABLE IF NOT EXISTS links (
+        token TEXT PRIMARY KEY,
+        amount REAL UNIQUE
+    )
     ''')
     conn.commit()
     conn.close()
@@ -60,39 +63,51 @@ def generate_upi_qr(upi_id, amount):
 @bot.message_handler(commands=['gen'])
 def generate_link(message):
     if message.from_user.id != ADMIN_ID:
-        
-        return  # Sirf admin access
-        
+        return # Sirf admin access
+
     args = message.text.split()
-    if len(args) < 2 or not args[1].isdigit():
-        bot.reply_to(message, "❌ Sahi format use karein: `/gen <amount>`\nExample: `/gen 82`", parse_mode="Markdown")
+    if len(args) < 2:
+        bot.reply_to(message, "❌ Sahi format use karein: `/gen <amount>`\nExample: `/gen 82.05`", parse_mode="Markdown")
         return
+
+    # Decimal (Float) validate karne ke liye try-except block
+    try:
+        amount = float(args[1])
+        # Sirf 2 decimal places tak limit karne ke liye (jaise 82.05)
+        amount = round(amount, 2)
+    except ValueError:
+        bot.reply_to(message, "❌ Invalid amount! Kripya sahi number daalein (Example: 82.05).", parse_mode="Markdown")
+        return
+
+    conn = sqlite3.connect('bot_data.db')
+    cursor = conn.cursor()
+
+    try:
+        # Check karein ki yeh amount pehle se database me hai ya nahi
+        cursor.execute('SELECT token FROM links WHERE amount = ?', (amount,))
+        existing = cursor.fetchone()
+
+        if existing:
+            bot.reply_to(message, f"⚠ *Error:* ₹{amount} ka link pehle se bana hua hai! Aap dobara nahi bana sakte.", parse_mode="Markdown")
+            return
+
+        # Unique token generate karein
+        unique_token = secrets.token_hex(6)
+
+        # Database me save karein
+        cursor.execute('INSERT INTO links (token, amount) VALUES (?, ?)', (unique_token, amount))
+        conn.commit()
+
+        # Sahi URL slash (/) ke sath
+        link = f"https://t.me/{BOT_USERNAME}?start=resell_{unique_token}"
+        bot.reply_to(message, f"✅ *Permanent Link Generated for ₹{amount}:*\n\n`{link}`", parse_mode="Markdown")
+
+    except Exception as e:
+        print(f"Database error: {e}")
+        bot.reply_to(message, "❌ Kuch database error aaya hai. Logs check karein.")
         
-        amount = int(args[1])
-    
-    # --- YEH CODES ADD KAREIN (Amount Unique Rakhne Ke Liye) ---
-    conn = sqlite3.connect('bot_data.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT token FROM links WHERE amount = ?', (amount,))
-    existing = cursor.fetchone()
-    
-    if existing:
-        bot.reply_to(message, f"⚠️ *Error:* ₹{amount} ka link pehle se bana hua hai! Aap dobara nahi bana sakte.", parse_mode="Markdown")
+    finally:
         conn.close()
-        return   
-    
-    # Safe aur secure token generate karein
-    unique_token = secrets.token_hex(6)
-    
-    # Database me save karein (Permanent Storage)
-    conn = sqlite3.connect('bot_data.db')
-    cursor = conn.cursor()
-    cursor.execute('INSERT INTO links (token, amount) VALUES (?, ?)', (unique_token, amount))
-    conn.commit()
-    conn.close()
-    
-    link = f"https://t.me{BOT_USERNAME}?start=resell_{unique_token}"
-    bot.reply_to(message, f"✅ *Permanent Link Generated for ₹{amount}:*\n\n`{link}`", parse_mode="Markdown")
 
 # --- USER COMMAND: Jab koi permanent link open karega ---
 @bot.message_handler(commands=['start'])
