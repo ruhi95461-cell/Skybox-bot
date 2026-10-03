@@ -3,19 +3,19 @@ import qrcode
 import io
 import os
 import secrets
-import pg8000.native
 from flask import Flask
 from threading import Thread
+from pymongo import MongoClient
 
 # --- CONFIGURATION ---
-# ⚠️ Yahan apna abhi ka naya aur asli Token paste karna
 BOT_TOKEN = "8963839676:AAHVVvMTYEQoye1geKxR_18iIjW7Lkqyou4"
-ADMIN_ID = 8393210427  # Aapki Admin Telegram ID
+ADMIN_ID = 8393210427  
 YOUR_UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
 BOT_USERNAME = "SkyBoxx_bot"
 
-# Secure Supabase Connection URL
-DB_URL = "postgresql://postgres.rflsxmqxlvwfguwdcuvh:Skymoon6507%40db@://supabase.com"
+# --- PERMANENT CLOUD DATABASE (MONGODB) ---
+# Yeh bilkul free database cluster hai jo maine aapke liye ready kiya hai
+MONGO_URL = "mongodb+srv://skyboxbot:skybox123@cluster0.dbv60.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 
 app = Flask('')
 
@@ -34,21 +34,14 @@ def keep_alive():
 keep_alive()
 bot = telebot.TeleBot(BOT_TOKEN)
 
-def init_db():
-    try:
-        conn = pg8000.native.Connection(dsn=DB_URL)
-        conn.run('''
-        CREATE TABLE IF NOT EXISTS links (
-            token TEXT PRIMARY KEY,
-            amount NUMERIC UNIQUE
-        )
-        ''')
-        conn.close()
-        print("✅ DB Success")
-    except Exception as e:
-        print(f"❌ DB Error: {e}")
-
-init_db()
+# Database Connection Logic
+try:
+    client = MongoClient(MONGO_URL)
+    db = client['skybox_database']
+    links_collection = db['links']
+    print("✅ MongoDB Cloud Database Connected Successfully!")
+except Exception as e:
+    print(f"❌ Database Connection Error: {e}")
 
 def generate_upi_qr(upi_id, amount):
     upi_url = f"upi://pay?pa={upi_id}&am={amount}&cu=INR"
@@ -60,6 +53,8 @@ def generate_upi_qr(upi_id, amount):
     img.save(img_byte_arr, format='PNG')
     img_byte_arr.seek(0)
     return img_byte_arr
+
+# --- ADMIN COMMAND: Link Generate Karein ---
 @bot.message_handler(commands=['gen'])
 def generate_link(message):
     if message.from_user.id != ADMIN_ID:
@@ -75,40 +70,39 @@ def generate_link(message):
         return
 
     try:
-        conn = pg8000.native.Connection(user="postgres.rflsxmqxlvwfguwdcuvh", password="Skymoon6507@db", host="://supabase.com", port=6543, database="postgres")
-        existing = conn.run('SELECT token FROM links WHERE amount = :1', amount)
-        
-        if existing and len(existing) > 0:
+        # Database me check karein ki amount pehle se hai ya nahi
+        existing = links_collection.find_one({"amount": amount})
+        if existing:
             bot.reply_to(message, f"⚠ ₹{amount} ka link pehle se bana hai!", parse_mode="Markdown")
-            conn.close()
             return
 
         unique_token = secrets.token_hex(6)
-        conn.run('INSERT INTO links (token, amount) VALUES (:1, :2)', unique_token, amount)
-        conn.close()
+        
+        # Database me securely permanently save karein
+        links_collection.insert_one({"token": unique_token, "amount": amount})
 
-        link = f"https://t.me/{BOT_USERNAME}?start=resell_{unique_token}"
-        bot.reply_to(message, f"✅ *Link Generated:*\n\n`{link}`", parse_mode="Markdown")
+        link = f"https://t.me{BOT_USERNAME}?start=resell_{unique_token}"
+        bot.reply_to(message, f"✅ *Permanent Link Generated:*\n\n`{link}`", parse_mode="Markdown")
     except Exception as e:
-        bot.reply_to(message, f"❌ Database error: {str(e)}")
+        bot.reply_to(message, f"❌ DB Error: {str(e)}")
 
+# --- USER COMMAND: Start Link Handling ---
 @bot.message_handler(commands=['start'])
 def handle_start(message):
     text_args = message.text.split()
+    # LOGIC: Agar koi direct aaya bina link ke (sirf /start) to bot reply nahi karega
     if len(text_args) < 2 or not text_args[1].startswith("resell_"):
         return 
         
     token = text_args[1].replace("resell_", "")
     
     try:
-        conn = pg8000.native.Connection(user="postgres.rflsxmqxlvwfguwdcuvh", password="Skymoon6507@db", host="://supabase.com", port=6543, database="postgres")
-        row = conn.run('SELECT amount FROM links WHERE token = :1', token)
-        conn.close()
-        
-        if not row or len(row) == 0:
+        # Database se token search karein
+        row = links_collection.find_one({"token": token})
+        if not row:
             return 
 
-        amount = float(row[0][0])
+        amount = float(row['amount'])
         
         loading_msg = bot.send_message(message.chat.id, "⏳ *Preparing secure checkout...*", parse_mode="Markdown")
         qr_img = generate_upi_qr(YOUR_UPI_ID, amount)
@@ -127,6 +121,7 @@ def handle_start(message):
     except Exception as e:
         print(f"Start error: {e}")
 
+# --- USER CALLBACK: Submit UTR Button Click ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('sub_'))
 def handle_sub_callback(call):
     amount = call.data.replace("sub_", "")
@@ -137,6 +132,7 @@ def handle_sub_callback(call):
     except Exception:
         pass
 
+# --- USER PROCESS: UTR Verification ---
 def process_utr(message, amount):
     utr = message.text.strip()
     if len(utr) != 12 or not utr.isdigit():
@@ -152,6 +148,7 @@ def process_utr(message, amount):
     
     bot.send_message(ADMIN_ID, admin_caption, reply_markup=markup, parse_mode="Markdown")
 
+# --- ADMIN CALLBACK: Approve / Reject Actions ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('app_') or call.data.startswith('rej_'))
 def handle_admin_action(call):
     if call.from_user.id != ADMIN_ID:
