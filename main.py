@@ -17,6 +17,7 @@ BOT_USERNAME = "SkyBoxx_bot"
 saved_links = {
     "xyz12345": 82.05, # Example permanent link
     "ec9d0934afe7": 78.0,
+    "23953c2d8090": 69.0,
 }
 
 app = Flask('')
