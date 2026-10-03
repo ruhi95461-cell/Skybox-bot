@@ -8,12 +8,13 @@ from flask import Flask
 from threading import Thread
 
 # --- CONFIGURATION ---
+# ⚠️ Yahan apna abhi ka naya aur asli Token paste karna
 BOT_TOKEN = "8963839676:AAHVVvMTYEQoye1geKxR_18iIjW7Lkqyou4"
-ADMIN_ID = 839321042
+ADMIN_ID = 8393210427  # Aapki Admin Telegram ID
 YOUR_UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
 BOT_USERNAME = "SkyBoxx_bot"
 
-# Single connection string jisme sab settings mixed hain
+# Secure Supabase Connection URL
 DB_URL = "postgresql://postgres.rflsxmqxlvwfguwdcuvh:Skymoon6507%40db@://supabase.com"
 
 app = Flask('')
@@ -35,7 +36,6 @@ bot = telebot.TeleBot(BOT_TOKEN)
 
 def init_db():
     try:
-        # Direct secure DSN string connection
         conn = pg8000.native.Connection(dsn=DB_URL)
         conn.run('''
         CREATE TABLE IF NOT EXISTS links (
@@ -49,6 +49,7 @@ def init_db():
         print(f"❌ DB Error: {e}")
 
 init_db()
+
 def generate_upi_qr(upi_id, amount):
     upi_url = f"upi://pay?pa={upi_id}&am={amount}&cu=INR"
     qr = qrcode.QRCode(version=1, box_size=10, border=4)
@@ -59,7 +60,6 @@ def generate_upi_qr(upi_id, amount):
     img.save(img_byte_arr, format='PNG')
     img_byte_arr.seek(0)
     return img_byte_arr
-
 @bot.message_handler(commands=['gen'])
 def generate_link(message):
     if message.from_user.id != ADMIN_ID:
@@ -74,12 +74,11 @@ def generate_link(message):
         bot.reply_to(message, "❌ Invalid amount!", parse_mode="Markdown")
         return
 
-    try:        
+    try:
         conn = pg8000.native.Connection(dsn=DB_URL)
-
         existing = conn.run('SELECT token FROM links WHERE amount = :1', amount)
         
-        if existing:
+        if existing and len(existing) > 0:
             bot.reply_to(message, f"⚠ ₹{amount} ka link pehle se bana hai!", parse_mode="Markdown")
             conn.close()
             return
@@ -87,33 +86,25 @@ def generate_link(message):
         unique_token = secrets.token_hex(6)
         conn.run('INSERT INTO links (token, amount) VALUES (:1, :2)', unique_token, amount)
         conn.close()
+
+        link = f"https://t.me{BOT_USERNAME}?start=resell_{unique_token}"
+        bot.reply_to(message, f"✅ *Link Generated:*\n\n`{link}`", parse_mode="Markdown")
     except Exception as e:
         bot.reply_to(message, f"❌ Database error: {str(e)}")
-    else:
-        link = f"https://t.me/{BOT_USERNAME}?start=resell_{unique_token}"
-        bot.reply_to(message, f"✅ *Link Generated:*\n\n`{link}`", parse_mode="Markdown")
-    finally:
-        try:
-            conn.close()
-        except:
-            pass
 
-# --- USER COMMAND: Jab koi permanent link open karega ---
 @bot.message_handler(commands=['start'])
 def handle_start(message):
     text_args = message.text.split()
-    # ⬇️ YEH LINES ADD KAREIN (Bina link wale user ko silent rakhne ke liye)
     if len(text_args) < 2 or not text_args[1].startswith("resell_"):
         return 
         
-    token = text_args.replace("resell_", "")
-
+    token = text_args[1].replace("resell_", "")
+    
     try:
         conn = pg8000.native.Connection(dsn=DB_URL)
         row = conn.run('SELECT amount FROM links WHERE token = :1', token)
         conn.close()
         
-        # 2. Agar database me wo token nahi mila (fake link) to silent rahega
         if not row or len(row) == 0:
             return 
 
@@ -134,7 +125,7 @@ def handle_start(message):
         except Exception:
             pass
     except Exception as e:
-        print(f"Start logic error: {e}")
+        print(f"Start error: {e}")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('sub_'))
 def handle_sub_callback(call):
@@ -160,6 +151,7 @@ def process_utr(message, amount):
     markup.add(approve_btn, reject_btn)
     
     bot.send_message(ADMIN_ID, admin_caption, reply_markup=markup, parse_mode="Markdown")
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith('app_') or call.data.startswith('rej_'))
 def handle_admin_action(call):
     if call.from_user.id != ADMIN_ID:
