@@ -116,14 +116,32 @@ def process_utr(message, amount):
     if len(utr) != 12 or not utr.isdigit():
         msg = bot.reply_to(message, "❌ Invalid UTR! 12-digit ka number bhejiye. Dobara button daba kar try karein.")
         return
-    bot.reply_to(message, "⏳ *Apka UTR verify ho raha hai...*", parse_mode="Markdown")
+        
+    # # 1. Pehle user ko bolenge ki verify ho raha hai
+    bot.reply_to(message, "*⏳ Apka UTR verify ho raha hai...*", parse_mode="Markdown")
     
-    admin_caption = f"🔔 *Naya Payment Aaya Hai!*\n\n👤 User: {message.from_user.first_name} (ID: `{message.from_user.id}`)\n💰 Amount: ₹{amount}\n🧾 UTR: `{utr}`"
+    # # 2. 8 second ka wait lagayenge
+    import time
+    time.sleep(8)
+    
+    # # 3. User ko bold text mein reply bhejenge
+    bot.reply_to(message, "*Apka payment receive nhi hua ❌\nPlease try again....*", parse_mode="Markdown")
+    
+    # # 4. Admin ko notification bhejenge (Sirf Naam, ID, Amount aur UTR/Transaction ID)
+    admin_caption = (
+        f"🔔 *Naya Payment Request!*\n\n"
+        f"👤 *User:* {message.from_user.first_name}\n"
+        f"🆔 *User ID:* `{message.from_user.id}`\n"
+        f"💰 *Amount:* ₹{amount}\n"
+        f"🧾 *Transaction ID (UTR):* `{utr}`"
+    )
+    
     markup = telebot.types.InlineKeyboardMarkup()
     approve_btn = telebot.types.InlineKeyboardButton("✅ Approve", callback_data=f"app_{message.from_user.id}_{amount}_{utr}")
     reject_btn = telebot.types.InlineKeyboardButton("❌ Reject", callback_data=f"rej_{message.from_user.id}_{utr}")
     markup.add(approve_btn, reject_btn)
     
+    # Admin ko message chala jayega
     bot.send_message(ADMIN_ID, admin_caption, reply_markup=markup, parse_mode="Markdown")
 
 # --- ADMIN CALLBACK: Approve / Reject Actions ---
