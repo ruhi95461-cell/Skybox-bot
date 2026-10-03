@@ -16,7 +16,7 @@ def run_flask():
     app.run(host='0.0.0.0', port=8000)
     
 # ==================== CONFIGURATION ====================
-BOT_TOKEN = ""
+BOT_TOKEN = "8963839676:AAGGANKNDqW9gyrmRd2c4dbN4JONCo7hzz4"
 ADMIN_ID = 8393210427  
 YOUR_UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
 BOT_USERNAME = "SkyBoxx_bot"
