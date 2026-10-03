@@ -110,21 +110,28 @@ def generate_link(message):
 @bot.message_handler(commands=['start'])
 def handle_start(message):
     text_args = message.text.split()
-    amount = 80  # Default amount
     
-    if len(text_args) > 1 and text_args[1].startswith("resell_"):
-        token = text_args[1].replace("resell_", "")
-        
-        # Database se check karein ki yeh token kis amount ka hai
-        conn = sqlite3.connect('bot_data.db')
-        cursor = conn.cursor()
-        cursor.execute('SELECT amount FROM links WHERE token = ?', (token,))
-        row = cursor.fetchone()
-        conn.close()
-        
-        if row:
-            amount = row[0]
+    # CHECK: Agar koi direct aaya bina link ke (sirf /start) toh bot reply nahi karega
+    if len(text_args) < 2 or not text_args[1].startswith("resell_"):
+        return 
 
+    # Link se token nikalenge
+    token = text_args[1].replace("resell_", "")
+    
+    # Database se check karein ki yeh token sahi hai ya nahi
+    conn = sqlite3.connect('bot_data.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT amount FROM links WHERE token = ?', (token,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    # CHECK: Agar galat ya fake link hai toh bhi bot silent rahega
+    if not row:
+        return 
+
+    # Sahi token hone par real amount set hoga
+    amount = row[0]
+    
     # 1. Loading message
     loading_msg = bot.send_message(message.chat.id, "⏳ *Preparing secure checkout...*", parse_mode="Markdown")
     
