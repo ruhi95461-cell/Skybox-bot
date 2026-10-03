@@ -8,7 +8,7 @@ from flask import Flask
 from threading import Thread
 
 # --- CONFIGURATION ---
-BOT_TOKEN = "8963839676:AAGGANKNDqW9gyrmRd2c4dbN4JONCo7hzz4"
+BOT_TOKEN = ""
 ADMIN_ID = 8393210427 
 YOUR_UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
 BOT_USERNAME = "SkyBoxx_bot"
