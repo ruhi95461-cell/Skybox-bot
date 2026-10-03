@@ -8,16 +8,14 @@ from flask import Flask
 from threading import Thread
 
 # --- CONFIGURATION ---
-BOT_TOKEN = "8963839676:AAGGANKNDqW9gyrmRd2c4dbN4JONCo7hzz4"
-ADMIN_ID = 8393210427 
+BOT_TOKEN = "8963839676:AAGGANKNDqM9gyrmRd2c4dbN4JDNCozhzz4"
+ADMIN_ID = 839321042
 YOUR_UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
 BOT_USERNAME = "SkyBoxx_bot"
 
-DB_USER = "postgres"
-DB_PASSWORD = "Skymoon6507@db"
-DB_HOST = "://supabase.com"
-DB_PORT = 6543
-DB_NAME = "postgres"
+# Single connection string jisme sab settings mixed hain
+DB_URL = "postgresql://postgres.rflsxmqxlvwfguwdcuvh:Skymoon6507%40db@://supabase.com"
+
 app = Flask('')
 
 @app.route('/')
@@ -37,7 +35,8 @@ bot = telebot.TeleBot(BOT_TOKEN)
 
 def init_db():
     try:
-        conn = pg8000.native.Connection(user=DB_USER, password=DB_PASSWORD, host=DB_HOST, port=DB_PORT, database=DB_NAME)
+        # Direct secure DSN string connection
+        conn = pg8000.native.Connection(dsn=DB_URL)
         conn.run('''
         CREATE TABLE IF NOT EXISTS links (
             token TEXT PRIMARY KEY,
@@ -75,8 +74,9 @@ def generate_link(message):
         bot.reply_to(message, "❌ Invalid amount!", parse_mode="Markdown")
         return
 
-    try:
-        conn = pg8000.native.Connection(user=DB_USER, password=DB_PASSWORD, host=DB_HOST, port=DB_PORT, database=DB_NAME)
+    try:        
+        conn = pg8000.native.Connection(dsn=DB_URL)
+
         existing = conn.run('SELECT token FROM links WHERE amount = :1', amount)
         
         if existing:
@@ -106,10 +106,10 @@ def handle_start(message):
     if len(text_args) < 2 or not text_args[1].startswith("resell_"):
         return 
         
-    token = text_args[1].replace("resell_", "")
+    token = text_args.replace("resell_", "")
 
     try:
-        conn = pg8000.native.Connection(user=DB_USER, password=DB_PASSWORD, host=DB_HOST, port=DB_PORT, database=DB_NAME)
+        conn = pg8000.native.Connection(dsn=DB_URL)
         row = conn.run('SELECT amount FROM links WHERE token = :1', token)
         conn.close()
         
