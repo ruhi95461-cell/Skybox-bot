@@ -35,13 +35,9 @@ keep_alive()
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # Database Connection Logic
-try:
-    client = MongoClient(MONGO_URL)
-    db = client['skybox_database']
-    links_collection = db['links']
-    print("✅ MongoDB Cloud Database Connected Successfully!")
-except Exception as e:
-    print(f"❌ Database Connection Error: {e}")
+client = MongoClient(MONGO_URL)
+db = client['skybox_database']
+links_collection = db['links']
 
 def generate_upi_qr(upi_id, amount):
     upi_url = f"upi://pay?pa={upi_id}&am={amount}&cu=INR"
