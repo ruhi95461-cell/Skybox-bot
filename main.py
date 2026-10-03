@@ -3,8 +3,6 @@ import qrcode
 import io
 import os
 import secrets
-import base64
-import requests
 from flask import Flask
 from threading import Thread
 
@@ -14,17 +12,10 @@ ADMIN_ID = 8393210427
 YOUR_UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
 BOT_USERNAME = "SkyBoxx_bot"
 
-# --- GITHUB AUTO-UPDATER CONFIG ---
-# ⚠️ Yahan aapna ghp_ wala token aur sahi details daalna
-GITHUB_TOKEN = os.environ.get("GH_TOKEN")
-REPO_OWNER = "ruhi95461-cell"
-REPO_NAME = "Skybox-bot"
-FILE_PATH = "main.py"
-
-# --- PERMANENT LINKS MEMORY ---
-# ⚠️ DO NOT REMOVE THIS COMMENT - Bot isko read karta hai code update karne ke liye
+# --- PERMANENT LINKS CHART ---
+# 📝 Line 17: Jo bhi link aap permanently save rakhna chahte hain, use niche jodte jayein:
 saved_links = {
-    "xyz12345": 82.05,
+    "xyz12345": 82.05,  # Example permanent link
 }
 
 app = Flask('')
@@ -43,39 +34,6 @@ def keep_alive():
 
 keep_alive()
 bot = telebot.TeleBot(BOT_TOKEN)
-
-# GitHub par code auto-save karne ka function
-def save_link_to_github(token, amount):
-    try:
-        url = f"https://github.com{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}"
-        headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
-        
-        # 1. Puraani file ka content aur SHA fetch karein
-        r = requests.get(url, headers=headers)
-        if r.status_code != 200:
-            return False
-            
-        file_data = r.json()
-        sha = file_data['sha']
-        content = base64.b64decode(file_data['content']).decode('utf-8')
-        
-        # 2. saved_links wale segment me naya token inject karein
-        target_line = 'saved_links = {'
-        if target_line in content:
-            replacement = f'{target_line}\n    "{token}": {amount},'
-            new_content = content.replace(target_line, replacement, 1)
-            
-            # 3. GitHub par update push karein
-            payload = {
-                "message": f"Auto-added link: {token} for ₹{amount}",
-                "content": base64.b64encode(new_content.encode('utf-8')).decode('utf-8'),
-                "sha": sha
-            }
-            put_r = requests.put(url, headers=headers, json=payload)
-            return put_r.status_code == 200
-    except Exception as e:
-        print(f"GitHub Auto-Update Error: {e}")
-    return False
 
 def generate_upi_qr(upi_id, amount):
     upi_url = f"upi://pay?pa={upi_id}&am={amount}&cu=INR"
@@ -110,16 +68,8 @@ def generate_link(message):
     unique_token = secrets.token_hex(6)
     saved_links[unique_token] = amount 
 
-    link = f"https://t.me{BOT_USERNAME}?start=resell_{unique_token}"
-    
-    # Live testing ke liye reply turant milega
-    status_msg = bot.reply_to(message, f"⏳ *Link bankar ready hai. GitHub par permanent save ho raha hai...*", parse_mode="Markdown")
-    
-    # Background me GitHub auto-update chalega
-    if save_link_to_github(unique_token, amount):
-        bot.edit_message_text(f"✅ *Permanent Link Generated & Saved to GitHub:*\n\n`{link}`\n\nAb ye link lifetime ke liye permanent safe hai!", message.chat.id, status_msg.message_id, parse_mode="Markdown")
-    else:
-        bot.edit_message_text(f"⚠ *Link Generated Temporary:*\n\n`{link}`\n\n❌ GitHub Token error ki wajah se automatic save nahi ho paya. Kripya token check karein.", message.chat.id, status_msg.message_id, parse_mode="Markdown")
+    link = f"https://t.me/{BOT_USERNAME}?start=resell_{unique_token}"
+    bot.reply_to(message, f"✅ *Link Generated:*\n\n`{link}`\n\n📝 Is token ko code me `saved_links` ke andar `\"{unique_token}\": {amount}` jod dena taaki permanent rahe.", parse_mode="Markdown")
 
 # --- USER COMMAND: Start Link Handling ---
 @bot.message_handler(commands=['start'])
@@ -160,7 +110,6 @@ def handle_sub_callback(call):
     except Exception:
         pass
 
-# --- USER PROCESS: UTR Verification ---
 def process_utr(message, amount):
     utr = message.text.strip()
     if len(utr) != 12 or not utr.isdigit():
