@@ -8,7 +8,7 @@ from flask import Flask
 from threading import Thread
 
 # --- CONFIGURATION ---
-BOT_TOKEN = ""
+BOT_TOKEN = "8963839676:AAGGANKNDqW9gyrmRd2c4dbN4JONCo7hzz4"
 ADMIN_ID = 8393210427 
 YOUR_UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
 BOT_USERNAME = "SkyBoxx_bot"
@@ -89,18 +89,25 @@ def generate_link(message):
         conn.close()
     except Exception as e:
         bot.reply_to(message, f"❌ Database error: {str(e)}")
+    else:
+        link = f"https://t.me{BOT_USERNAME}?start=resell_{unique_token}"
+        bot.reply_to(message, f"✅ *Link Generated:*\n\n`{link}`", parse_mode="Markdown")
+    finally:
+        try:
+            conn.close()
+        except:
+            pass
 
 # --- USER COMMAND: Jab koi permanent link open karega ---
 @bot.message_handler(commands=['start'])
 def handle_start(message):
     text_args = message.text.split()
-    
-    # 1. Agar koi direct aaya bina link ke (sirf /start) to bot reply nahi karega
+    # ⬇️ YEH LINES ADD KAREIN (Bina link wale user ko silent rakhne ke liye)
     if len(text_args) < 2 or not text_args[1].startswith("resell_"):
         return 
         
     token = text_args[1].replace("resell_", "")
-    
+
     try:
         conn = pg8000.native.Connection(user=DB_USER, password=DB_PASSWORD, host=DB_HOST, port=DB_PORT, database=DB_NAME)
         row = conn.run('SELECT amount FROM links WHERE token = :1', token)
