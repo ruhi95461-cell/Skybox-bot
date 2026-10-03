@@ -15,7 +15,8 @@ BOT_USERNAME = "SkyBoxx_bot"
 # --- PERMANENT LINKS CHART ---
 # 📝 Line 17: Jo bhi link aap permanently save rakhna chahte hain, use niche jodte jayein:
 saved_links = {
-    "xyz12345": 82.05,  # Example permanent link
+    "xyz12345": 82.05, # Example permanent link
+    "ec9d0934afe7": 78.0,
 }
 
 app = Flask('')
