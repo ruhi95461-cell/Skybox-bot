@@ -74,43 +74,61 @@ def generate_link(message):
     except ValueError:
         bot.reply_to(message, "❌ Invalid amount!", parse_mode="Markdown")
         return
-    conn = pg8000.native.Connection(user=DB_USER, password=DB_PASSWORD, host=DB_HOST, port=DB_PORT, database=DB_NAME)
+
     try:
+        conn = pg8000.native.Connection(user=DB_USER, password=DB_PASSWORD, host=DB_HOST, port=DB_PORT, database=DB_NAME)
         existing = conn.run('SELECT token FROM links WHERE amount = :1', amount)
+        
         if existing:
             bot.reply_to(message, f"⚠ ₹{amount} ka link pehle se bana hai!", parse_mode="Markdown")
+            conn.close()
             return
+
         unique_token = secrets.token_hex(6)
         conn.run('INSERT INTO links (token, amount) VALUES (:1, :2)', unique_token, amount)
-        link = f"https://t.me/{BOT_USERNAME}?start=resell_{unique_token}"
-        bot.reply_to(message, f"✅ *Link Generated:*\n\n`{link}`", parse_mode="Markdown")
-    except Exception as e:
-        bot.reply_to(message, "❌ Database error!")
-    finally:
         conn.close()
+    except Exception as e:
+        bot.reply_to(message, f"❌ Database error: {str(e)}")
+
+# --- USER COMMAND: Jab koi permanent link open karega ---
 @bot.message_handler(commands=['start'])
 def handle_start(message):
     text_args = message.text.split()
+    
+    # 1. Agar koi direct aaya bina link ke (sirf /start) to bot reply nahi karega
     if len(text_args) < 2 or not text_args[1].startswith("resell_"):
         return 
+        
     token = text_args[1].replace("resell_", "")
-    conn = pg8000.native.Connection(user=DB_USER, password=DB_PASSWORD, host=DB_HOST, port=DB_PORT, database=DB_NAME)
-    row = conn.run('SELECT amount FROM links WHERE token = :1', token)
-    conn.close()
-    if not row:
-        return 
-    amount = float(row[0][0])
-    loading_msg = bot.send_message(message.chat.id, "⏳ *Preparing secure checkout...*", parse_mode="Markdown")
-    qr_img = generate_upi_qr(YOUR_UPI_ID, amount)
-    caption_text = f"Pay ₹{amount} for the item\n\nUPI ID — {YOUR_UPI_ID}\n\nInstructions:\n• Scan QR or copy UPI ID\n• Pay exactly ₹{amount} within 10 minutes\n• After payment, please submit 12 digit UTR."
-    markup = telebot.types.InlineKeyboardMarkup()
-    btn = telebot.types.InlineKeyboardButton("📥 Submit UTR", callback_data=f"sub_{amount}")
-    markup.add(btn)
-    bot.send_photo(message.chat.id, qr_img, caption=caption_text, reply_markup=markup)
+    
     try:
-        bot.delete_message(message.chat.id, loading_msg.message_id)
-    except Exception:
-        pass
+        conn = pg8000.native.Connection(user=DB_USER, password=DB_PASSWORD, host=DB_HOST, port=DB_PORT, database=DB_NAME)
+        row = conn.run('SELECT amount FROM links WHERE token = :1', token)
+        conn.close()
+        
+        # 2. Agar database me wo token nahi mila (fake link) to silent rahega
+        if not row or len(row) == 0:
+            return 
+
+        amount = float(row[0][0])
+        
+        loading_msg = bot.send_message(message.chat.id, "⏳ *Preparing secure checkout...*", parse_mode="Markdown")
+        qr_img = generate_upi_qr(YOUR_UPI_ID, amount)
+        
+        caption_text = f"Pay ₹{amount} for the item\n\nUPI ID — {YOUR_UPI_ID}\n\nInstructions:\n• Scan QR or copy UPI ID\n• Pay exactly ₹{amount} within 10 minutes\n• After payment, please submit 12 digit UTR."
+        
+        markup = telebot.types.InlineKeyboardMarkup()
+        btn = telebot.types.InlineKeyboardButton("📥 Submit UTR", callback_data=f"sub_{amount}")
+        markup.add(btn)
+        
+        bot.send_photo(message.chat.id, qr_img, caption=caption_text, reply_markup=markup)
+        try:
+            bot.delete_message(message.chat.id, loading_msg.message_id)
+        except Exception:
+            pass
+    except Exception as e:
+        print(f"Start logic error: {e}")
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith('sub_'))
 def handle_sub_callback(call):
     amount = call.data.replace("sub_", "")
