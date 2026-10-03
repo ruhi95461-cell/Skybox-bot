@@ -79,8 +79,7 @@ def generate_link(message):
     if existing:
         bot.reply_to(message, f"⚠️ *Error:* ₹{amount} ka link pehle se bana hua hai! Aap dobara nahi bana sakte.", parse_mode="Markdown")
         conn.close()
-        return
-   
+        return   
     
     # Safe aur secure token generate karein
     unique_token = secrets.token_hex(6)
@@ -92,7 +91,7 @@ def generate_link(message):
     conn.commit()
     conn.close()
     
-    link = f"https://t.me/{BOT_USERNAME}?start=resell_{unique_token}"
+    link = f"https://t.me{BOT_USERNAME}?start=resell_{unique_token}"
     bot.reply_to(message, f"✅ *Permanent Link Generated for ₹{amount}:*\n\n`{link}`", parse_mode="Markdown")
 
 # --- USER COMMAND: Jab koi permanent link open karega ---
