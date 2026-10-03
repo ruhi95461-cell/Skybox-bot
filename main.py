@@ -8,8 +8,8 @@ from flask import Flask
 from threading import Thread
 
 # --- CONFIGURATION ---
-BOT_TOKEN = "YOUR_REAL_TELEGRAM_BOT_TOKEN_HERE"
-ADMIN_ID = 6523999999  # Aapki Admin Telegram ID
+BOT_TOKEN = "8963839676:AAGGANKNDqW9gyrmRd2c4dbN4JONCo7hzz4"
+ADMIN_ID = 8393210427 
 YOUR_UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
 BOT_USERNAME = "SkyBoxx_bot"
 
@@ -82,7 +82,7 @@ def generate_link(message):
             return
         unique_token = secrets.token_hex(6)
         conn.run('INSERT INTO links (token, amount) VALUES (:1, :2)', unique_token, amount)
-        link = f"https://t.me{BOT_USERNAME}?start=resell_{unique_token}"
+        link = f"https://t.me/{BOT_USERNAME}?start=resell_{unique_token}"
         bot.reply_to(message, f"✅ *Link Generated:*\n\n`{link}`", parse_mode="Markdown")
     except Exception as e:
         bot.reply_to(message, "❌ Database error!")
