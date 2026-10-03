@@ -15,8 +15,8 @@ BOT_USERNAME = "SkyBoxx_bot"
 
 DB_USER = "postgres"
 DB_PASSWORD = "Skymoon6507@db"
-DB_HOST = "db.rflsxmqxlvwfguwdcuvh.supabase.co"
-DB_PORT = 5432
+DB_HOST = "://supabase.com"
+DB_PORT = 6543
 DB_NAME = "postgres"
 app = Flask('')
 
@@ -90,7 +90,7 @@ def generate_link(message):
     except Exception as e:
         bot.reply_to(message, f"❌ Database error: {str(e)}")
     else:
-        link = f"https://t.me{BOT_USERNAME}?start=resell_{unique_token}"
+        link = f"https://t.me/{BOT_USERNAME}?start=resell_{unique_token}"
         bot.reply_to(message, f"✅ *Link Generated:*\n\n`{link}`", parse_mode="Markdown")
     finally:
         try:
