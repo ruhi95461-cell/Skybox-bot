@@ -34,7 +34,7 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS links (
             token TEXT PRIMARY KEY,
-            amount INTEGER
+            amount INTEGER UNIQUE
         )
     ''')
     conn.commit()
@@ -68,7 +68,19 @@ def generate_link(message):
         bot.reply_to(message, "❌ Sahi format use karein: `/gen <amount>`\nExample: `/gen 82`", parse_mode="Markdown")
         return
         
-    amount = int(args[1])
+        amount = int(args[1])
+    
+    # --- YEH CODES ADD KAREIN (Amount Unique Rakhne Ke Liye) ---
+    conn = sqlite3.connect('bot_data.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT token FROM links WHERE amount = ?', (amount,))
+    existing = cursor.fetchone()
+    
+    if existing:
+        bot.reply_to(message, f"⚠️ *Error:* ₹{amount} ka link pehle se bana hua hai! Aap dobara nahi bana sakte.", parse_mode="Markdown")
+        conn.close()
+        return
+   
     
     # Safe aur secure token generate karein
     unique_token = secrets.token_hex(6)
