@@ -1,220 +1,162 @@
 import telebot
-from telebot import types
 import qrcode
 import io
-import time
+import os
 import secrets
-import psycopg2
+import pg8000.native
 from flask import Flask
-import threading
-app = Flask('')
-@app.route('/')
-def home():
-    return "Bot is Alive"
+from threading import Thread
 
-def run_flask():
-    app.run(host='0.0.0.0', port=8000)
-    
-# ==================== CONFIGURATION ====================
-BOT_TOKEN = ""
-ADMIN_ID = 8393210427  
+# --- CONFIGURATION ---
+BOT_TOKEN = "YOUR_REAL_TELEGRAM_BOT_TOKEN_HERE"
+ADMIN_ID = 6523999999  # Aapki Admin Telegram ID
 YOUR_UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
 BOT_USERNAME = "SkyBoxx_bot"
 
-# =======================================================
+DB_USER = "postgres"
+DB_PASSWORD = "Skymoon6507@db"
+DB_HOST = "db.rflsxmqxlvwfguwdcuvh.supabase.co"
+DB_PORT = 5432
+DB_NAME = "postgres"
+app = Flask('')
 
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host='0.0.0.0', port=port)
+
+def keep_alive():
+    t = Thread(target=run_flask)
+    t.start()
+
+keep_alive()
 bot = telebot.TeleBot(BOT_TOKEN)
 
-DB_URL = "postgresql://postgres:Skymoon6507@@db.rflsxmqxlvwfguwdcuvh.supabase.co:5432/postgres"
-
-# --- DATABASE SETUP ---
 def init_db():
-    conn = psycopg2.connect(DB_URL)
-    cursor = conn.cursor()
-    
-    # Nayi table fresh banegi PostgreSQL format mein
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS links (
-        token TEXT PRIMARY KEY,
-        amount NUMERIC UNIQUE
-    )
-    ''')
-    conn.commit()
-    conn.close()
+    try:
+        conn = pg8000.native.Connection(user=DB_USER, password=DB_PASSWORD, host=DB_HOST, port=DB_PORT, database=DB_NAME)
+        conn.run('''
+        CREATE TABLE IF NOT EXISTS links (
+            token TEXT PRIMARY KEY,
+            amount NUMERIC UNIQUE
+        )
+        ''')
+        conn.close()
+        print("✅ DB Success")
+    except Exception as e:
+        print(f"❌ DB Error: {e}")
 
-# Database ko initial start pe run karein
 init_db()
-
-# UPI QR Code generator function
 def generate_upi_qr(upi_id, amount):
     upi_url = f"upi://pay?pa={upi_id}&am={amount}&cu=INR"
     qr = qrcode.QRCode(version=1, box_size=10, border=4)
     qr.add_data(upi_url)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
-    
     img_byte_arr = io.BytesIO()
     img.save(img_byte_arr, format='PNG')
     img_byte_arr.seek(0)
     return img_byte_arr
 
-# --- ADMIN COMMAND: Permanent Link Generate Karein ---
 @bot.message_handler(commands=['gen'])
 def generate_link(message):
     if message.from_user.id != ADMIN_ID:
-        return # Sirf admin access
-
+        return
     args = message.text.split()
     if len(args) < 2:
-        bot.reply_to(message, "❌ Sahi format use karein: `/gen <amount>`\nExample: `/gen 82.05`", parse_mode="Markdown")
+        bot.reply_to(message, "❌ Sahi format: `/gen <amount>`", parse_mode="Markdown")
         return
-
-    # Decimal (Float) validate karne ke liye try-except block
     try:
-        amount = float(args[1])
-        # Sirf 2 decimal places tak limit karne ke liye (jaise 82.05)
-        amount = round(amount, 2)
+        amount = round(float(args[1]), 2)
     except ValueError:
-        bot.reply_to(message, "❌ Invalid amount! Kripya sahi number daalein (Example: 82.05).", parse_mode="Markdown")
+        bot.reply_to(message, "❌ Invalid amount!", parse_mode="Markdown")
         return
-
-    conn = sqlite3.connect('bot_data.db')
-    cursor = conn.cursor()
-
+    conn = pg8000.native.Connection(user=DB_USER, password=DB_PASSWORD, host=DB_HOST, port=DB_PORT, database=DB_NAME)
     try:
-        # Check karein ki yeh amount pehle se database me hai ya nahi
-        cursor.execute('SELECT token FROM links WHERE amount = ?', (amount,))
-        existing = cursor.fetchone()
-
+        existing = conn.run('SELECT token FROM links WHERE amount = :1', amount)
         if existing:
-            bot.reply_to(message, f"⚠ *Error:* ₹{amount} ka link pehle se bana hua hai! Aap dobara nahi bana sakte.", parse_mode="Markdown")
+            bot.reply_to(message, f"⚠ ₹{amount} ka link pehle se bana hai!", parse_mode="Markdown")
             return
-
-        # Unique token generate karein
         unique_token = secrets.token_hex(6)
-
-        # Database me save karein
-        cursor.execute('INSERT INTO links (token, amount) VALUES (?, ?)', (unique_token, amount))
-        conn.commit()
-
-        # Sahi URL slash (/) ke sath
-        link = f"https://t.me/{BOT_USERNAME}?start=resell_{unique_token}"
-        bot.reply_to(message, f"✅ *Permanent Link Generated for ₹{amount}:*\n\n`{link}`", parse_mode="Markdown")
-
+        conn.run('INSERT INTO links (token, amount) VALUES (:1, :2)', unique_token, amount)
+        link = f"https://t.me{BOT_USERNAME}?start=resell_{unique_token}"
+        bot.reply_to(message, f"✅ *Link Generated:*\n\n`{link}`", parse_mode="Markdown")
     except Exception as e:
-        print(f"Database error: {e}")
-        bot.reply_to(message, "❌ Kuch database error aaya hai. Logs check karein.")
-        
+        bot.reply_to(message, "❌ Database error!")
     finally:
         conn.close()
-
-# --- USER COMMAND: Jab koi permanent link open karega ---
 @bot.message_handler(commands=['start'])
 def handle_start(message):
     text_args = message.text.split()
-    
-    # CHECK: Agar koi direct aaya bina link ke (sirf /start) toh bot reply nahi karega
     if len(text_args) < 2 or not text_args[1].startswith("resell_"):
         return 
-
-    # Link se token nikalenge
     token = text_args[1].replace("resell_", "")
-    
-    # Database se check karein ki yeh token sahi hai ya nahi
-    conn = sqlite3.connect('bot_data.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT amount FROM links WHERE token = ?', (token,))
-    row = cursor.fetchone()
+    conn = pg8000.native.Connection(user=DB_USER, password=DB_PASSWORD, host=DB_HOST, port=DB_PORT, database=DB_NAME)
+    row = conn.run('SELECT amount FROM links WHERE token = :1', token)
     conn.close()
-    
-    # CHECK: Agar galat ya fake link hai toh bhi bot silent rahega
     if not row:
         return 
-
-    # Sahi token hone par real amount set hoga
-    amount = row[0]
-    
-    # 1. Loading message
+    amount = float(row[0][0])
     loading_msg = bot.send_message(message.chat.id, "⏳ *Preparing secure checkout...*", parse_mode="Markdown")
-    
-    # 2. QR stream generate karein
     qr_img = generate_upi_qr(YOUR_UPI_ID, amount)
-    
-    caption_text = (
-        f"Pay ₹{amount} for the item\n\n"
-        f"UPI ID — {YOUR_UPI_ID}\n\n"
-        f"Instructions:\n"
-        f"• Scan this QR or copy the UPI ID\n"
-        f"• Pay exactly ₹{amount} within 10 minutes\n"
-        f"Verification is automatic.\n"
-        f"• After payment, please submit 12 digit UTR/Transaction id."
-    )
-    
-    markup = types.InlineKeyboardMarkup()
-    btn = types.InlineKeyboardButton("📥 Submit UTR", callback_data=f"sub_{amount}")
+    caption_text = f"Pay ₹{amount} for the item\n\nUPI ID — {YOUR_UPI_ID}\n\nInstructions:\n• Scan QR or copy UPI ID\n• Pay exactly ₹{amount} within 10 minutes\n• After payment, please submit 12 digit UTR."
+    markup = telebot.types.InlineKeyboardMarkup()
+    btn = telebot.types.InlineKeyboardButton("📥 Submit UTR", callback_data=f"sub_{amount}")
     markup.add(btn)
-    
-    # 3. QR send aur loading text delete
     bot.send_photo(message.chat.id, qr_img, caption=caption_text, reply_markup=markup)
     try:
         bot.delete_message(message.chat.id, loading_msg.message_id)
     except Exception:
         pass
-
-# --- BUTTON CLICK CALLBACK ---
-@bot.callback_query_handler(func=lambda call: call.data.startswith("sub_"))
-def ask_utr_input(call):
-    bot.answer_callback_query(call.id)
+@bot.callback_query_handler(func=lambda call: call.data.startswith('sub_'))
+def handle_sub_callback(call):
     amount = call.data.replace("sub_", "")
-    
-    msg = bot.send_message(
-        call.message.chat.id, 
-        f"✍️ Apna ₹{amount} ka **12 digit UTR / Transaction ID** niche type karke send karein:", 
-        parse_mode="Markdown",
-        reply_markup=types.ForceReply(selective=True)
-    )
-    bot.register_next_step_handler(msg, verify_and_log_utr, amount)
-
-# --- UTR PROCESSING ---
-def verify_and_log_utr(message, amount):
-    utr = message.text.strip()
-    user_id = message.from_user.id
-    username = message.from_user.username or "No Username"
-    first_name = message.from_user.first_name
-    
-    if not (len(utr) == 12 and utr.isdigit()):
-        bot.reply_to(message, "❌ Invalid UTR! Kripya 12-digit ka number enter karein.")
-        return
-
-    # Admin Alert Notification
-    admin_alert = (
-        f"📥 *New UTR Received!*\n\n"
-        f"👤 User: {first_name} (@{username})\n"
-        f"🆔 User ID: `{user_id}`\n"
-        f"💰 Amount: ₹{amount}\n"
-        f"📄 UTR Number: `{utr}`"
-    )
+    msg = bot.send_message(call.message.chat.id, f"📝 *Kripya ₹{amount} ka 12-digit UTR number bhejiye:*", parse_mode="Markdown")
+    bot.register_next_step_handler(msg, process_utr, amount)
     try:
-        bot.send_message(ADMIN_ID, admin_alert, parse_mode="Markdown")
-    except Exception as e:
-        print(f"Admin log failed: {e}")
-
-    # User Processing Status
-    verifying_msg = bot.reply_to(message, "🔄 _Verifying the UTR, please wait...._", parse_mode="Markdown")
-    
-    time.sleep(7) # 7 second delay
-    
-    try:
-        bot.edit_message_text(
-            chat_id=message.chat.id,
-            message_id=verifying_msg.message_id,
-            text="Payment Not Received ❌\nPlease Try Again.."
-        )
+        bot.answer_callback_query(call.id)
     except Exception:
-        bot.send_message(message.chat.id, "Payment Not Received ❌\nPlease Try Again..")
+        pass
+
+def process_utr(message, amount):
+    utr = message.text.strip()
+    if len(utr) != 12 or not utr.isdigit():
+        msg = bot.reply_to(message, "❌ Invalid UTR! 12-digit ka number bhejiye. Dobara button daba kar try karein.")
+        return
+    bot.reply_to(message, "⏳ *Apka UTR verify ho raha hai...*", parse_mode="Markdown")
+    
+    admin_caption = f"🔔 *Naya Payment Aaya Hai!*\n\n👤 User: {message.from_user.first_name} (ID: `{message.from_user.id}`)\n💰 Amount: ₹{amount}\n🧾 UTR: `{utr}`"
+    markup = telebot.types.InlineKeyboardMarkup()
+    approve_btn = telebot.types.InlineKeyboardButton("✅ Approve", callback_data=f"app_{message.from_user.id}_{amount}_{utr}")
+    reject_btn = telebot.types.InlineKeyboardButton("❌ Reject", callback_data=f"rej_{message.from_user.id}_{utr}")
+    markup.add(approve_btn, reject_btn)
+    
+    bot.send_message(ADMIN_ID, admin_caption, reply_markup=markup, parse_mode="Markdown")
+@bot.callback_query_handler(func=lambda call: call.data.startswith('app_') or call.data.startswith('rej_'))
+def handle_admin_action(call):
+    if call.from_user.id != ADMIN_ID:
+        return
+    data = call.data.split('_')
+    action = data[0]
+    user_id = int(data[1])
+    
+    if action == 'app':
+        amount = data[2]
+        utr = data[3]
+        bot.send_message(user_id, f"✅ *Aapka payment ₹{amount} successfully approve ho gaya hai!*", parse_mode="Markdown")
+        bot.edit_message_text(f"✅ Approved\nUser ID: `{user_id}`\nAmount: ₹{amount}\nUTR: `{utr}`", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+    elif action == 'rej':
+        utr = data[2]
+        bot.send_message(user_id, "❌ *Aapka payment reject kar diya gaya hai. Kripya sahi UTR check karein.*", parse_mode="Markdown")
+        bot.edit_message_text(f"❌ Rejected\nUser ID: `{user_id}`\nUTR: `{utr}`", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+        
+    try:
+        bot.answer_callback_query(call.id)
+    except Exception:
+        pass
 
 if __name__ == '__main__':
-    init_db()
-    threading.Thread(target=run_flask).start()
-    print("SkyBoxx_bot running on free tier...")
     bot.infinity_polling()
