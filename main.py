@@ -29,7 +29,7 @@ saved_links = {
 }
 }
 
-UPI QR Code Generator
+# UPI QR Code Generator
 def generate_upi_qr(upi_id, amount):
 upi_url = f"upi://pay?pa={upi_id}&am={amount}&cu=INR"
 qr = qrcode.QRCode(version=1, box_size=10, border=4)
@@ -42,7 +42,7 @@ img.save(img_byte_arr, format='PNG')
 img_byte_arr.seek(0)
 return img_byte_arr
 
-BHARATPE LIVE TRANSACTION CHECKER
+# BHARATPE LIVE TRANSACTION CHECKER
 def verify_bharatpe_payment(target_amount, target_utr):
 """
 Direct BharatPe ke server se last 10 transactions fetch karke
