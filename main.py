@@ -109,35 +109,34 @@ def generate_link(message):
     if message.from_user.id != ADMIN_ID:
         return
     try:
-        # Message text ko spaces se todna
         text_parts = message.text.split()
-        
-        # Check karna ki user ne amount bheja hai ya nahi
         if len(text_parts) < 2:
-            bot.reply_to(message, "⚠️ Command format: `/gen 80` (Amount dena zaroori hai)", parse_mode="Markdown")
+            bot.reply_to(message, "⚠️ Command format: /gen 65 (Amount dena zaroori hai)")
             return
             
-        # Amount ko float me convert karna
         amount = float(text_parts[1])
         unique_token = secrets.token_hex(6)
         
-        # Perfect fixed link
+        # Fixed functional link
         link = f"https://t.me_{unique_token}"
         
-        response_text = f"""🔗 *Naya Payment Link Taiyar Hai:*
-{link}
-
-📝 *GitHub ke `saved_links` me paste karne ke liye format:*
-`"{unique_token}": {{`
-`    "amount": {amount},`
-`    "photos": [],`
-`    "videos": []`
-`}},`"""
-        bot.reply_to(message, response_text, parse_mode="Markdown")
+        # HTML strings safe aur structured formatting ke sath
+        response_text = (
+            f"🔗 <b>Naya Payment Link Taiyar Hai:</b>\n"
+            f"{link}\n\n"
+            f"📝 <b>GitHub ke saved_links me paste karne ke liye format:</b>\n"
+            f"<code>\"{unique_token}\": {{\n"
+            f"    \"amount\": {amount},\n"
+            f"    \"photos\": [],\n"
+            f"    \"videos\": []\n"
+            f"}},</code>"
+        )
+        
+        # Parse mode HTML use kiya taaki brackets crash na karein
+        bot.reply_to(message, response_text, parse_mode="HTML")
         
     except Exception as e:
-        # Agar koi galti hogi toh bot ab chup nahi baithega, exact galti batayega!
-        bot.reply_to(message, f"❌ *Python Error:* {str(e)}", parse_mode="Markdown")
+        bot.reply_to(message, f"❌ Python Error: {str(e)}")
 
 # User Checkout (/start)
 @bot.message_handler(commands=['start'])
