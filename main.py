@@ -45,7 +45,7 @@ def generate_upi_qr(upi_id, amount):
 
 # BHARATPE LIVE TRANSACTION CHECKER
 def verify_bharatpe_payment(target_amount, target_utr):
-    url = f"https://bharatpe.in{BHARATPE_TOKENS['merchantId']}/transactions?limit=10"
+    url = f"https://bharatpe.in/{BHARATPE_TOKENS['merchantId']}/transactions?limit=10"
     headers = {
         "Authorization": f"Bearer {BHARATPE_TOKENS['token']}",
         "Content-Type": "application/json"
