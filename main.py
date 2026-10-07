@@ -49,10 +49,11 @@ def verify_bharatpe_payment(target_amount, target_utr):
     Direct BharatPe ke enterprise server se last 10 transactions fetch karke
     Amount aur UTR match karta hai.
     """
+    # FIX: BHATPE_TOKENS ko badal kar perfectly BHARATPE_TOKENS kar diya hai
     url = f"https://bharatpe.in{BHARATPE_TOKENS['merchantId']}/transactions?limit=10"
     
     headers = {
-        "token": f"{BHATPE_TOKENS['token']}",
+        "token": f"{BHARATPE_TOKENS['token']}",
         "Content-Type": "application/json"
     }
     try:
@@ -61,15 +62,12 @@ def verify_bharatpe_payment(target_amount, target_utr):
             data = response.json()
             transactions = data.get("transactions", data.get("data", []))
 
-            # Debugging ke liye console me logs print honge
-            print(f"Total transactions found: {len(transactions)}")
-
             for txn in transactions:
                 bank_utr = str(txn.get("bankReferenceNo", txn.get("utr", ""))).strip()
                 amount_paid = float(txn.get("amount", 0))
                 status = str(txn.get("status", "")).strip().upper()
 
-                # FIX: Loose validation lagaya hai taaki integer/float ka lafda na ho aur success kisi bhi case me match ho jaye
+                # Loose matching format integer/float issue bypass karne ke liye
                 if bank_utr == str(target_utr).strip() and int(amount_paid) == int(float(target_amount)) and (status == "SUCCESS" or status == "COMPLETED" or status == ""):
                     return True
         elif response.status_code == 401:
