@@ -18,7 +18,7 @@ app = Flask('')
 
 # BHARATPE SESSION DATA (Isse browser se nikalna hoga)
 BHARATPE_TOKENS = {
-    "token": "08a3b21de7124d9b21de7124d97b06daae48ebf1a2",
+    "token": "7fc625a0b28c4917a406fbdadd46eb29",
     "merchantId": "49007719"
 }
 
