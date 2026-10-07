@@ -10,6 +10,7 @@ import qrcode
 BOT_TOKEN = "8963839676:AAHbkhulxdQOFUJBRcXRAhCuL1aDDElc4-s"
 ADMIN_ID = 8393210427
 YOUR_UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
+BOT_USERNAME = "SkyBoxx_bot"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
@@ -17,8 +18,8 @@ app = Flask('')
 BHARATPE SESSION DATA (Isse browser se nikalna hoga)
 Admin isse /renew command se kabhi bhi badal sakta hai bina bot restart kiye
 BHARATPE_TOKENS = {
-"token": "YOUR_BHARATPE_AUTH_TOKEN_HERE",
-"merchantId": "YOUR_MERCHANT_ID_HERE"
+"token": "08a3b21de7124d9b21de7124d97b06daae48ebf1a2",
+"merchantId": "49007719"
 }
 
 Permanent Links Storage (Manually edit karne ke liye)
