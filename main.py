@@ -24,13 +24,12 @@ BHARATPE_TOKENS = {
 
 # Permanent Links Storage (Manually edit karne ke liye)
 saved_links = {
-    # Iske andar aap apni photo/video IDs manually bhar sakte hain
-    "example_token_123": {
-        "amount": 80.0,
-        "photos": ["FILE_ID_PHOTO_1"],
-        "videos": ["FILE_ID_VIDEO_1"]
-    }
-}
+# Iske andar aap apni photo/video IDs manually bhar sakte hain
+"76d2bd64f406": {
+    "amount": 65.0,
+    "photos": [],
+    "videos": []
+},
 
 # UPI QR Code Generator
 def generate_upi_qr(upi_id, amount):
