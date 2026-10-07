@@ -11,7 +11,6 @@ import qrcode
 BOT_TOKEN = "8963839676:AAHbkhulxdQOFUJBRcXRAhCuL1aDDElc4-s"
 ADMIN_ID = 8393210427
 YOUR_UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
-BOT_USERNAME = "SkyBoxx_bot"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
@@ -115,7 +114,7 @@ def generate_link(message):
             return
             
         amount = float(text_parts[1])
-        unique_token = secrets.token_hex(6)
+        unique_token = secrets.token_hex(10)
         
         # Fixed functional link
         link = f"https://t.me_{unique_token}"
