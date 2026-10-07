@@ -110,16 +110,17 @@ def generate_link(message):
     try:
         text_parts = message.text.split()
         if len(text_parts) < 2:
-            bot.reply_to(message, "⚠️ Command format: /gen 65 (Amount dena zaroori hai)")
+            bot.reply_to(message, "⚠️ Command format: /gen 80 (Amount dena zaroori hai)")
             return
             
         amount = float(text_parts[1])
+        
+        # 10 likhne se lamba token banega
         unique_token = secrets.token_hex(10)
         
-        # Fixed functional link
-        link = f"https://t.me_{unique_token}"
+        # Sahi format jo direct Telegram open karega
+        link = f"tg://resolve?domain=SkyBoxx_bot&start=resell_{unique_token}"
         
-        # HTML strings safe aur structured formatting ke sath
         response_text = (
             f"🔗 <b>Naya Payment Link Taiyar Hai:</b>\n"
             f"{link}\n\n"
@@ -131,7 +132,6 @@ def generate_link(message):
             f"}},</code>"
         )
         
-        # Parse mode HTML use kiya taaki brackets crash na karein
         bot.reply_to(message, response_text, parse_mode="HTML")
         
     except Exception as e:
