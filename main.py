@@ -178,8 +178,11 @@ def start_payment(message):
 @bot.callback_query_handler(func=lambda call: call.data.startswith("sub_"))
 def trigger_utr_input(call):
     try:
-        # Callback data se amount aur token nikalna
-        _, amount, token = call.data.split("_")
+        # FIX: maxsplit=2 kiya hai taaki lamba token perfectly split ho bina crash kiye
+        data_parts = call.data.split("_", 2)
+        amount = data_parts[1]
+        token = data_parts[2]
+        
         msg = bot.send_message(call.message.chat.id, "✍ *Ab apna 12-digit ka UTR number yahan type karke bhejein:*", parse_mode="Markdown")
         bot.register_next_step_handler(msg, process_utr, amount, token)
     except Exception as e:
@@ -187,53 +190,58 @@ def trigger_utr_input(call):
 
 # Core Logic: UTR Processing & Real Verification
 def process_utr(message, amount, token):
-    utr = message.text.strip()
-    
-    # Check agar UTR valid format me hai (12 digits aur sirf numbers)
-    if len(utr) != 12 or not utr.isdigit():
-        bot.reply_to(message, "❌ *Galt UTR!* Kripya 12-digit ka sahi UTR number dobara bhejiyen.", parse_mode="Markdown")
-        return
-
-    bot.reply_to(message, "⏳ *Apka UTR BharatPe server par verify ho raha hai... (Takes 8s)*", parse_mode="Markdown")
-    time.sleep(8)
-
-    # Direct BharatPe Live Verification check
-    is_valid_payment = verify_bharatpe_payment(amount, utr)
-
-    # Admin Alert Notification Text
-    status_text = "✅ Verified & Delivered" if is_valid_payment else "❌ Fake/Unpaid"
-    admin_caption = (
-        f"🔔 *New UTR Submitted!*\n\n"
-        f"👤 *User:* {message.from_user.first_name} (`{message.from_user.id}`)\n"
-        f"💰 *Amount:* ₹{amount}\n"
-        f"🧾 *UTR:* `{utr}`\n"
-        f"⚙ *Status:* {status_text}"
-    )
-    
-    # Admin ko report bhejna
-    bot.send_message(ADMIN_ID, admin_caption, parse_mode="Markdown")
-
-    if is_valid_payment:
-        bot.reply_to(message, "✅ *Payment Successful!* Aapka media niche deliver kiya ja raha hai:", parse_mode="Markdown")
+    try:
+        utr = message.text.strip()
         
-        # Ek-ek karke saari photos aur videos deliver karna
-        media_data = saved_links.get(token, {})
+        # Check agar UTR valid format me hai (12 digits aur sirf numbers)
+        if len(utr) != 12 or not utr.isdigit():
+            bot.reply_to(message, "❌ *Galt UTR!* Kripya 12-digit ka UTR number dobara sahi se bhejein.", parse_mode="Markdown")
+            return
+
+        bot.reply_to(message, "⏳ *Apka UTR BharatPe server par verify ho raha hai... (Takes 8s)*", parse_mode="Markdown")
+        time.sleep(8)
+
+        # Direct BharatPe Live Verification check
+        is_valid_payment = verify_bharatpe_payment(amount, utr)
+
+        # Admin Alert Notification Text
+        status_text = "✅ Verified & Delivered" if is_valid_payment else "❌ Fake/Unpaid"
         
-        for photo_id in media_data.get("photos", []):
-            try:
-                bot.send_photo(message.chat.id, photo_id)
-                time.sleep(1)
-            except Exception as e:
-                print(f"Photo delivery failed: {e}")
-                
-        for video_id in media_data.get("videos", []):
-            try:
-                bot.send_video(message.chat.id, video_id)
-                time.sleep(1)
-            except Exception as e:
-                print(f"Video delivery failed: {e}")
-    else:
-        bot.reply_to(message, "❌ *Apka payment receive nhi hua!*\n Please try again....", parse_mode="Markdown")
+        # FIX: Triple quotes use kiya hai taaki safe concatenation ho aur text parse crash na ho
+        admin_caption = f"""🔔 *New UTR Submitted!*
+
+👤 *User:* {message.from_user.first_name} (`{message.from_user.id}`)
+💰 *Amount:* ₹{amount}
+🧾 *UTR:* `{utr}`
+⚙ *Status:* {status_text}"""
+        
+        # Admin ko report bhejna
+        bot.send_message(ADMIN_ID, admin_caption, parse_mode="Markdown")
+
+        if is_valid_payment:
+            bot.reply_to(message, "✅ *Payment Successful!* Aapka media niche deliver kiya ja raha hai:", parse_mode="Markdown")
+            
+            # Ek-ek karke saari photos aur videos deliver karna
+            media_data = saved_links.get(token, {})
+            
+            for photo_id in media_data.get("photos", []):
+                try:
+                    bot.send_photo(message.chat.id, photo_id)
+                    time.sleep(1)
+                except Exception as e:
+                    print(f"Photo delivery failed: {e}")
+                    
+            for video_id in media_data.get("videos", []):
+                try:
+                    bot.send_video(message.chat.id, video_id)
+                    time.sleep(1)
+                except Exception as e:
+                    print(f"Video delivery failed: {e}")
+        else:
+            bot.reply_to(message, "❌ *Apka payment receive nhi hua!*\nPlease try again....", parse_mode="Markdown")
+            
+    except Exception as e:
+        bot.reply_to(message, f"❌ UTR Process Error: {str(e)}")
 
 # Main Execution Control Loop
 if __name__ == '__main__':
