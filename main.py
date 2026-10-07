@@ -123,11 +123,15 @@ def generate_link(message):
         unique_token = secrets.token_hex(6)
         link = f"https://t.me_{unique_token}"
         
-        response_text = (
-            f"🔗 *Naya Payment Link Taiyar Hai:*\n{link}\n\n"
-            f"📝 *GitHub ke `saved_links` me paste karne ke liye format:*\n"
-            f"`\"{unique_token}\": {{\n    \"amount\": {amount},\n    \"photos\": [],\n    \"videos\": []\n}},`"
-        )
+        response_text = f"""🔗 *Naya Payment Link Taiyar Hai:*
+{link}
+
+📝 *GitHub ke `saved_links` me paste karne ke liye format:*
+`"{unique_token}": {{`
+`    "amount": {amount},`
+`    "photos": [],`
+`    "videos": []`
+`}},`"""
         bot.reply_to(message, response_text, parse_mode="Markdown")
     except:
         bot.reply_to(message, "⚠ Command format: `/gen 80`", parse_mode="Markdown")
