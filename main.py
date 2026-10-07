@@ -30,6 +30,7 @@ saved_links = {
     "photos": [],
     "videos": []
 },
+{
 
 # UPI QR Code Generator
 def generate_upi_qr(upi_id, amount):
