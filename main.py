@@ -15,7 +15,6 @@ BOT_USERNAME = "SkyBoxx_bot"
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
 
-Admin isse /renew command se kabhi bhi badal sakta hai bina bot restart kiye
 BHARATPE_TOKENS = {
 "token": "08a3b21de7124d9b21de7124d97b06daae48ebf1a2",
 "merchantId": "49007719"
