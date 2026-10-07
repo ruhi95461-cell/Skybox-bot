@@ -122,7 +122,7 @@ try:
 amount = float(message.text.split()[1])
 unique_token = secrets.token_hex(6)
 bot_username = bot.get_me().username
-link = f"https://t.me/{SkyBoxx_bot}?start=resell_{unique_token}"
+link = f"https://t.me/{bot_username}?start=resell_{unique_token}"
 
 response_text = (
 f"🔗 Naya Payment Link Taiyar Hai:\n{link}\n\n"
