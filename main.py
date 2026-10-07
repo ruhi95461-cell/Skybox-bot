@@ -11,6 +11,7 @@ import qrcode
 BOT_TOKEN = "8963839676:AAHbkhulxdQOFUJBRcXRAhCuL1aDDElc4-s"
 ADMIN_ID = 8393210427
 YOUR_UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
+BOT_USERNAME = "SkyBoxx_bot"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
@@ -102,46 +103,47 @@ def renew_session(message):
         except:
             bot.reply_to(message, "❌ Format Galt Hai!\nUse: /renew <token> <merchantId>", parse_mode="Markdown")
 
-# Link Generator Command
+# --- ADMIN COMMAND: Link Generate Karein ---
 @bot.message_handler(commands=['gen'])
 def generate_link(message):
     if message.from_user.id != ADMIN_ID:
         return
+    args = message.text.split()
+    if len(args) < 2:
+        bot.reply_to(message, "❌ Sahi format: `/gen <amount>`", parse_mode="Markdown")
+        return
     try:
-        text_parts = message.text.split()
-        if len(text_parts) < 2:
-            bot.reply_to(message, "⚠️ Command format: /gen 80 (Amount dena zaroori hai)")
+        amount = round(float(args[1]), 2)
+    except ValueError:
+        bot.reply_to(message, "❌ Invalid amount!", parse_mode="Markdown")
+        return
+
+    # Check karna ki amount pehle se saved links me hai ya nahi
+    for token, data in saved_links.items():
+        if isinstance(data, dict) and data.get("amount") == amount:
+            old_link = f"https://t.me_{token}"
+            bot.reply_to(message, f"⚠ ₹{amount} ka link pehle se bana hai:\n`{old_link}`", parse_mode="Markdown")
             return
-            
-        amount = float(text_parts[1])
-        
-        # Instantly working balance token size
-        unique_token = secrets.token_hex(6)
-        
-        # Perfect deep-link format jo direct Telegram open karega bina browser jaye
-        link = f"https://t.me_{unique_token}"
-        
-        response_text = (
-            f"🔗 <b>Naya Payment Link Taiyar Hai:</b>\n"
-            f"{link}\n\n"
-            f"📝 <b>GitHub ke saved_links me paste karne ke liye format:</b>\n"
-            f"<code>\"{unique_token}\": {{\n"
-            f"    \"amount\": {amount},\n"
-            f"    \"photos\": [],\n"
-            f"    \"videos\": []\n"
-            f"}},</code>"
-        )
-        
-        bot.reply_to(message, response_text, parse_mode="HTML")
-        
-    except Exception as e:
-        bot.reply_to(message, f"❌ Python Error: {str(e)}")
+
+    unique_token = secrets.token_hex(6)
+    
+    # Aapke script ke structural format ke mutabik data save karna
+    saved_links[unique_token] = {
+        "amount": amount,
+        "photos": [],
+        "videos": []
+    }
+
+    # Aapka exact working link format jo aapne script me dala hai
+    link = f"https://t.me_{unique_token}"
+    
+    bot.reply_to(message, f"✅ *Link Generated:*\n\n`{link}`\n\n📝 Is token ko code me `saved_links` ke andar jod dena taaki permanent rahe:\n`\"{unique_token}\": {{\n    \"amount\": {amount},\n    \"photos\": [],\n    \"videos\": []\n}},`", parse_mode="Markdown")
 
 # User Checkout (/start)
 @bot.message_handler(commands=['start'])
 def start_payment(message):
     try:
-        args = message.text.split(' ')
+        args = message.text.split()
         text_args = args[1] if len(args) > 1 else ""
         
         if text_args.startswith("resell_"):
@@ -163,7 +165,6 @@ def start_payment(message):
                 btn = telebot.types.InlineKeyboardButton("📥 Submit UTR", callback_data=f"sub_{amount}_{token}")
                 markup.add(btn)
                 
-                # Fixed: Variable caption_text perfectly match kar diya gaya hai
                 bot.send_photo(message.chat.id, qr_img, caption=caption_text, reply_markup=markup)
             else:
                 bot.reply_to(message, "❌ Yeh link invalid hai ya expire ho chuka hai.")
