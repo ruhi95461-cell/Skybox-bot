@@ -135,7 +135,7 @@ def generate_link(message):
     }
 
     # Aapka exact working link format jo aapne script me dala hai
-    link = f"https://t.me_{unique_token}"
+    link = f"https://t.me/{BOT_USERNAME}?start=resell_{unique_token}"
     
     bot.reply_to(message, f"✅ *Link Generated:*\n\n`{link}`\n\n📝 Is token ko code me `saved_links` ke andar jod dena taaki permanent rahe:\n`\"{unique_token}\": {{\n    \"amount\": {amount},\n    \"photos\": [],\n    \"videos\": []\n}},`", parse_mode="Markdown")
 
