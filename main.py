@@ -7,7 +7,6 @@ from threading import Thread
 import io
 import qrcode
 
-Token aur ID details
 BOT_TOKEN = "8963839676:AAHbkhulxdQOFUJBRcXRAhCuL1aDDElc4-s"
 ADMIN_ID = 8393210427
 YOUR_UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
