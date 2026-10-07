@@ -20,7 +20,6 @@ BHARATPE_TOKENS = {
 "merchantId": "49007719"
 }
 
-Permanent Links Storage (Manually edit karne ke liye)
 saved_links = {
 # Iske andar aap apni photo/video IDs manually bhar sakte hain
 "example_token_123": {
