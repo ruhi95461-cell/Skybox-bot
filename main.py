@@ -47,9 +47,10 @@ def generate_upi_qr(upi_id, amount):
 def verify_bharatpe_payment(target_amount, target_utr):
     """
     Direct BharatPe ke enterprise server se transactions fetch karke
-    Pure response text me UTR aur Amount search karta hai taaki match fail na ho.
+    Pure response text me UTR search karta hai taaki structure mismatch na ho.
     """
-    url = f"https://bharatpe.in{BHARATPE_TOKENS['merchantId']}/transactions?limit=10"
+    # 100% Sahi URL aur Slash Setup
+    url = f"https://bharatpe.in/{BHARATPE_TOKENS['merchantId']}/transactions?limit=10"
     
     headers = {
         "token": f"{BHARATPE_TOKENS['token']}",
@@ -58,18 +59,13 @@ def verify_bharatpe_payment(target_amount, target_utr):
     try:
         response = requests.get(url, headers=headers, timeout=8)
         if response.status_code == 200:
-            # Pura response data text format me nikalna
+            # Pura response data text (string) format me badalna
             response_text = response.text
-            
-            # Sahi matching ke liye spaces hatana
             clean_utr = str(target_utr).strip()
             
-            # Check karna ki kya UTR aur Amount pure data me exist karte hain
-            # (Kuch APIs me status 'SUCCESS' hota hai aur kuch me 'COMPLETED' ya blank)
+            # Agar user ka bhejha hua 12-digit UTR data me kahin bhi maujud hai, toh pass!
             if clean_utr in response_text:
-                # Agar UTR data me mil jata hai, toh verification pass!
                 return True
-                
         elif response.status_code == 401:
             bot.send_message(ADMIN_ID, "⚠️ Alert: Aapka BharatPe Session Token expire ho gaya hai! Kripya naya token dalein.")
     except Exception as e:
