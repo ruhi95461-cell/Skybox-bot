@@ -119,7 +119,7 @@ def generate_link(message):
         unique_token = secrets.token_hex(10)
         
         # Sahi format jo direct Telegram open karega
-        link = f"tg://resolve?domain=SkyBoxx_bot&start=resell_{unique_token}"
+        link = https://t.me/SkyBoxx_bot&start=resell_{unique_token}"
         
         response_text = (
             f"🔗 <b>Naya Payment Link Taiyar Hai:</b>\n"
