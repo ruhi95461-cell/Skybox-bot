@@ -140,33 +140,39 @@ def generate_link(message):
 # User Checkout (/start)
 @bot.message_handler(commands=['start'])
 def start_payment(message):
-    args = message.text.split(' ')
-    text_args = args[1] if len(args) > 1 else ""
-    
-    if text_args.startswith("resell_"):
-        token = text_args.replace("resell_", "")
+    try:
+        args = message.text.split(' ')
+        text_args = args[1] if len(args) > 1 else ""
         
-        if token in saved_links:
-            amount = saved_links[token]["amount"]
-            qr_img = generate_upi_qr(YOUR_UPI_ID, amount)
+        if text_args.startswith("resell_"):
+            token = text_args.replace("resell_", "").strip()
             
-            caption_text = (
-                f"Pay ₹{amount} for the item\n\n"
-                f"📌 UPI ID — {YOUR_UPI_ID}\n\n"
-                f"⚠️ Instructions:\n"
-                f"1. QR Code scan karke exact ₹{amount} pay karein.\n"
-                f"2. Payment karne ke baad Submit UTR button par click karein aur 12-digit ka UTR number bhejein."
-            )
-            
-            markup = telebot.types.InlineKeyboardMarkup()
-            btn = telebot.types.InlineKeyboardButton("📥 Submit UTR", callback_data=f"sub_{amount}_{token}")
-            markup.add(btn)
-            
-            bot.send_photo(message.chat.id, qr_img, caption=caption_text, reply_markup=markup)
+            if token in saved_links:
+                amount = saved_links[token]["amount"]
+                qr_img = generate_upi_qr(YOUR_UPI_ID, amount)
+                
+                caption_text = (
+                    f"Pay ₹{amount} for the item\n\n"
+                    f"📌 UPI ID — {YOUR_UPI_ID}\n\n"
+                    f"⚠️ Instructions:\n"
+                    f"1. QR Code scan karke exact ₹{amount} pay karein.\n"
+                    f"2. Payment karne ke baad Submit UTR button par click karein aur 12-digit ka UTR number bhejein."
+                )
+                
+                markup = telebot.types.InlineKeyboardMarkup()
+                btn = telebot.types.InlineKeyboardButton("📥 Submit UTR", callback_data=f"sub_{amount}_{token}")
+                markup.add(btn)
+                
+                # Yahan variable name (caption_text) bilkul sahi kar diya hai
+                bot.send_photo(message.chat.id, qr_img, caption=caption_text, reply_markup=markup)
+            else:
+                bot.reply_to(message, "❌ Yeh link invalid hai ya expire ho chuka hai.")
         else:
-            bot.reply_to(message, "❌ Yeh link invalid hai ya expire ho chuka hai.")
-    else:
-        bot.reply_to(message, "👋 Welcome to Skybox Bot!")
+            bot.reply_to(message, "👋 Welcome to Skybox Bot!")
+            
+    except Exception as e:
+        bot.reply_to(message, f"❌ System Error: {str(e)}")
+
 # Callback for UTR Submission Trigger
 @bot.callback_query_handler(func=lambda call: call.data.startswith("sub_"))
 def trigger_utr_input(call):
