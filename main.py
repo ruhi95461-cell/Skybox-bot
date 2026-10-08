@@ -48,32 +48,46 @@ def generate_upi_qr(upi_id, amount):
 def receive_notification():
     try:
         data = request.json  # App se JSON data aayega
+        if not data:
+            return jsonify({"status": "success"}), 200  # App ko shaant rakhne ke liye
+            
         notification_text = data.get("text", "")
         
-        # Logic: Text se 12-digit UTR aur Amount extract karna
-        import re
-        utr_match = re.search(r'\b\d{12}\b', notification_text)
-        amount_match = re.search(r'(?:Rs\.?|INR)\s*(\d+(?:\.\d+)?)', notification_text, re.IGNORECASE)
-        
-        if utr_match:
-            utr = utr_match.group(0)
-            amount = float(amount_match.group(1)) if amount_match else 0.0
-            
-            # Payment ko local database me save karlo
-            received_payments[utr] = amount
-            
-            # System Check: Offline Auto-Verification
-            if utr in pending_claims:
-                claim_data = pending_claims[utr]
-                deliver_media(claim_data["chat_id"], claim_data["token"])
-                bot.send_message(claim_data["chat_id"], "✅ *Payment Auto-Verified!* Aapka media deliver kar diya gaya hai.", parse_mode="Markdown")
-                bot.send_message(ADMIN_ID, f"🤖 *Auto-Verified:* UTR `{utr}` ka payment app se verify karke user ko deliver kar diya gaya.")
-                del pending_claims[utr]
+        # Background process ke liye alag function chalayenge taaki delay na ho
+        def process_payment(text):
+            try:
+                import re
+                # Optimized Regex: Yeh Rupees, Rs, INR aur direct digits sab handle karega
+                utr_match = re.search(r'\b\d{12}\b', text)
                 
-            return jsonify({"status": "success"}), 200
+                # BharatPe specific text "Received 1.00 Rupees" ko bhi match karega
+                amount_match = re.search(r'(?:Rs\.?|INR|Rupees|\b)\s*(\d+(?:\.\d+)?)', text, re.IGNORECASE)
+                
+                if utr_match:
+                    utr = utr_match.group(0)
+                    amount = float(amount_match.group(1)) if amount_match else 0.0
+                    
+                    # Payment ko local database me save karlo
+                    received_payments[utr] = amount
+                    
+                    # System Check: Offline Auto-Verification
+                    if utr in pending_claims:
+                        claim_data = pending_claims[utr]
+                        deliver_media(claim_data["chat_id"], claim_data["token"])
+                        bot.send_message(claim_data["chat_id"], "✅ *Payment Auto-Verified!* Aapka media deliver kar diya gaya hai.", parse_mode="Markdown")
+                        bot.send_message(ADMIN_ID, f"🤖 *Auto-Verified:* UTR `{utr}` ka payment app se verify karke user ko deliver kar diya gaya.")
+                        del pending_claims[utr]
+            except Exception as bg_e:
+                print(f"Background Processing Error: {bg_e}")
+
+        # Thread ka use karke process ko background mein daal do
+        Thread(target=process_payment, args=(notification_text,)).start()
+
     except Exception as e:
-        print(f"Webhook Error: {e}")
-    return jsonify({"status": "failed"}), 400
+        print(f"Webhook Main Error: {e}")
+        
+    # App ko hamesha 200 status code hi bhejna hai
+    return jsonify({"status": "success"}), 200
 
 @app.route('/')
 def home():
