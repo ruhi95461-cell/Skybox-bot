@@ -133,13 +133,13 @@ def generate_link(message):
 
     for token, data in saved_links.items():
         if isinstance(data, dict) and data.get("amount") == amount:
-            old_link = f"https://t.me{BOT_USERNAME}?start=resell_{token}"
+            old_link = f"https://t.me/{BOT_USERNAME}?start=resell_{token}"
             bot.reply_to(message, f"⚠ ₹{amount} ka link pehle se bana hai:\n`{old_link}`", parse_mode="Markdown")
             return
 
     unique_token = secrets.token_hex(6)
     saved_links[unique_token] = {"amount": amount, "photos": [], "videos": []}
-    link = f"https://t.me{BOT_USERNAME}?start=resell_{unique_token}"
+    link = f"https://t.me/{BOT_USERNAME}?start=resell_{unique_token}"
     bot.reply_to(message, f"✅ *Link Generated:*\n\n`{link}`", parse_mode="Markdown")
 
 # User Checkout (/start)
