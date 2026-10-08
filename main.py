@@ -8,7 +8,7 @@ import io
 import qrcode
 
 # Token aur ID details
-BOT_TOKEN = "8963839676:AAHa6-TquDWybNa7jzKyIb8PmKeesbqWa1U"
+BOT_TOKEN = "8963839676:AAGoxcbB_izx8FH8Qg_2FyOrbcgZe1hBzr0"
 ADMIN_ID = 8393210427
 YOUR_UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
 BOT_USERNAME = "SkyBoxx_bot"
