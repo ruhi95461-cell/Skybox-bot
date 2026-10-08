@@ -13,14 +13,11 @@ ADMIN_ID = 8393210427
 YOUR_UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
 BOT_USERNAME = "SkyBoxx_bot"
 
+# YAHAN PAR PASTE KARIYE WOH SECRET API KEY:
+GATEWAY_API_KEY = "76e07c40-a898-45d8-9c24-7e92ecfe2b9b"
+
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
-
-# BHARATPE SESSION DATA (Isse browser se nikalna hoga)
-BHARATPE_TOKENS = {
-    "token": "7fc625a0b28c4917a406fbdadd46eb29",
-    "merchantId": "49007719"
-}
 
 # Permanent Links Storage (Manually edit karne ke liye)
 saved_links = {
@@ -44,66 +41,60 @@ def generate_upi_qr(upi_id, amount):
     return img_byte_arr
 
 # ====================================================================
-# PERFECT INTEGRATED BHARATPE & UTR HANDLER (NO CRASH GUARANTEE)
+# LIVE UPIQRPAY WEBHOOK RECEIVER (100% AUTOMATIC GATEWAY INTEGRATION)
 # ====================================================================
+from flask import request, jsonify
 
-def verify_bharatpe_payment(target_amount, target_utr):
+@app.route('/')
+def home():
+    return "Skybox UPIQRPay Gateway Server is Active!"
+
+@app.route('/webhook', methods=['POST'])
+def gateway_webhook():
     try:
-        url = f"https://bharatpe.in{BHARATPE_TOKENS['merchantId']}/transactions?limit=10"
-        headers = {
-            "token": f"{BHARATPE_TOKENS['token']}",
-            "Content-Type": "application/json"
-        }
-        response = requests.get(url, headers=headers, timeout=8)
-        if response.status_code == 200:
-            response_text = response.text
-            clean_utr = str(target_utr).strip()
-            
-            # Pure text response me match dhundhna
-            if clean_utr in response_text:
-                return True
-        elif response.status_code == 401:
-            bot.send_message(ADMIN_ID, "⚠️ Alert: BharatPe Token Expire ho gaya hai!")
-    except Exception as e:
-        print(f"API Connection Error: {e}")
-    return False
+        # Gateway se aane wala live encrypted data json format me fetch karna
+        data = request.json
+        if not data:
+            return jsonify({"status": "error", "message": "No data received"}), 400
 
-def process_utr(message, amount, token):
-    try:
-        utr = message.text.strip()
+        print(f"📦 Gateway Data Logged: {data}")
+
+        # UPIQRPay dashboard standard structure parameters check karna
+        utr = str(data.get("utr", data.get("bank_Rrn", ""))).strip()
+        amount_paid = float(data.get("amount", 0))
+        status = str(data.get("status", "")).strip().upper()
         
-        if len(utr) != 12 or not utr.isdigit():
-            bot.reply_to(message, "❌ *Galt UTR!* Kripya 12-digit ka UTR number dobara sahi se bhejein.", parse_mode="Markdown")
-            return
+        # User dynamic identification variable fetch karna (jo custom param me pass hoga)
+        # Gateway checkout page create karte waqt 'custom' ya 'remark' field me metadata check hota hai
+        custom_data = data.get("custom", "") 
 
-        bot.reply_to(message, "⏳ *Apka UTR BharatPe server par verify ho raha hai... (Takes 8s)*", parse_mode="Markdown")
-        time.sleep(8)
-
-        # Safe calling process
-        is_valid_payment = verify_bharatpe_payment(amount, utr)
-        status_text = "✅ Verified & Delivered" if is_valid_payment else "❌ Fake/Unpaid"
-        
-        admin_caption = f"🔔 *New UTR Submitted!*\n\n👤 *User:* {message.from_user.first_name} (`{message.from_user.id}`)\n💰 *Amount:* ₹{amount}\n🧾 *UTR:* `{utr}`\n⚙ *Status:* {status_text}"
-        bot.send_message(ADMIN_ID, admin_caption, parse_mode="Markdown")
-
-        if is_valid_payment:
-            bot.reply_to(message, "✅ *Payment Successful!* Aapka media deliver kiya ja raha hai:", parse_mode="Markdown")
-            media_data = saved_links.get(token, {})
+        # Live success criteria evaluation logic
+        if utr and amount_paid > 0 and (status == "SUCCESS" or status == "COMPLETED" or status == "PAID"):
             
-            for photo_id in media_data.get("photos", []):
-                try: bot.send_photo(message.chat.id, photo_id)
-                except: pass
-            for video_id in media_data.get("videos", []):
-                try: bot.send_video(message.chat.id, video_id)
-                except: pass
-        else:
-            bot.reply_to(message, "❌ *Apka payment receive nhi hua!*\nPlease try again....", parse_mode="Markdown")
+            # Admin Dashboard Alert Update Notification Telegram message trigger karna
+            admin_msg = (
+                f"⚡️ <b>[UPIQRPay Webhook] Instant Payment Success!</b>\n\n"
+                f"💰 <b>Amount:</b> ₹{amount_paid}\n"
+                f"🧾 <b>UTR Number:</b> <code>{utr}</code>\n"
+                f"⚙️ <b>Status:</b> SUCCESS\n"
+                f"🔑 <b>Metadata:</b> {custom_data}"
+            )
+            bot.send_message(ADMIN_ID, admin_msg, parse_mode="HTML")
+
+            # NOTE: Jab gateway setup complete ho jayega toh data confirmation response 200 return karega
             
+        return jsonify({"status": "success", "message": "Processed Successfully"}), 200
+
     except Exception as e:
-        # Yeh line bot ko kabhi crash nahi hone degi, error screen par dikha degi
-        bot.reply_to(message, f"❌ Internal Processing Error: {str(e)}")
+        print(f"Gateway Critical Error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-# ====================================================================
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
 
 # Flask Keep-Alive Routing
 @app.route('/')
@@ -139,41 +130,65 @@ def renew_session(message):
         except:
             bot.reply_to(message, "❌ Format Galt Hai!\nUse: /renew <token> <merchantId>", parse_mode="Markdown")
 
-# --- ADMIN COMMAND: Link Generate Karein ---
+# --- ADMIN COMMAND: Automatic Gateway Link Generate Karein ---
 @bot.message_handler(commands=['gen'])
 def generate_link(message):
     if message.from_user.id != ADMIN_ID:
         return
     args = message.text.split()
     if len(args) < 2:
-        bot.reply_to(message, "❌ Sahi format: `/gen <amount>`", parse_mode="Markdown")
+        bot.reply_to(message, "❌ Sahi format: `/gen <amount>`")
         return
     try:
         amount = round(float(args[1]), 2)
     except ValueError:
-        bot.reply_to(message, "❌ Invalid amount!", parse_mode="Markdown")
+        bot.reply_to(message, "❌ Invalid amount!")
         return
 
-    # Check karna ki amount pehle se saved links me hai ya nahi
-    for token, data in saved_links.items():
-        if isinstance(data, dict) and data.get("amount") == amount:
-            old_link = f"https://t.me_{token}"
-            bot.reply_to(message, f"⚠ ₹{amount} ka link pehle se bana hai:\n`{old_link}`", parse_mode="Markdown")
-            return
-
     unique_token = secrets.token_hex(6)
-    
-    # Aapke script ke structural format ke mutabik data save karna
-    saved_links[unique_token] = {
+
+    # UPIQRPay API ke server par dynamic billing link create karne ki request bhejnah
+    url = "https://upiqrpay.in"
+    headers = {
+        "Authorization": f"Bearer {GATEWAY_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
         "amount": amount,
-        "photos": [],
-        "videos": []
+        "order_id": unique_token,
+        "remark": f"Payment for token {unique_token}",
+        "custom": unique_token # Yeh token webhook me wapas milega media deliver karne ke liye
     }
 
-    # Aapka exact working link format jo aapne script me dala hai
-    link = f"https://t.me/{BOT_USERNAME}?start=resell_{unique_token}"
-    
-    bot.reply_to(message, f"✅ *Link Generated:*\n\n`{link}`\n\n📝 Is token ko code me `saved_links` ke andar jod dena taaki permanent rahe:\n`\"{unique_token}\": {{\n    \"amount\": {amount},\n    \"photos\": [],\n    \"videos\": []\n}},`", parse_mode="Markdown")
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        if response.status_code == 200:
+            res_data = response.json()
+            # Gateway se aane wala payment page URL fetch karna
+            payment_link = res_data.get("payment_url", "")
+
+            # Aapke database structure ke mutabik entry save karna
+            saved_links[unique_token] = {
+                "amount": amount,
+                "photos": [],
+                "videos": []
+            }
+
+            response_text = (
+                f"🔗 <b>Automatic Payment Link Taiyar Hai:</b>\n"
+                f"{payment_link}\n\n"
+                f"📝 <b>GitHub ke saved_links me paste karne ke liye format:</b>\n"
+                f"<code>\"{unique_token}\": {{\n"
+                f"    \"amount\": {amount},\n"
+                f"    \"photos\": [],\n"
+                f"    \"videos\": []\n"
+                f"}},</code>"
+            )
+            bot.reply_to(message, response_text, parse_mode="HTML")
+        else:
+            bot.reply_to(message, f"❌ Gateway Error: Code {response.status_code}")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Gateway API Failed: {str(e)}")
 
 # User Checkout (/start)
 @bot.message_handler(commands=['start'])
