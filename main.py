@@ -43,34 +43,67 @@ def generate_upi_qr(upi_id, amount):
     img_byte_arr.seek(0)
     return img_byte_arr
 
-# BHARATPE LIVE TRANSACTION CHECKER
+# ====================================================================
+# PERFECT INTEGRATED BHARATPE & UTR HANDLER (NO CRASH GUARANTEE)
+# ====================================================================
+
 def verify_bharatpe_payment(target_amount, target_utr):
-    """
-    Direct BharatPe ke enterprise server se transactions fetch karke
-    Pure response text me UTR search karta hai taaki structure mismatch na ho.
-    """
-    # 100% Sahi URL aur Slash Setup
-    url = f"https://bharatpe.in/{BHARATPE_TOKENS['merchantId']}/transactions?limit=10"
-    
-    headers = {
-        "token": f"{BHARATPE_TOKENS['token']}",
-        "Content-Type": "application/json"
-    }
     try:
+        url = f"https://bharatpe.in{BHARATPE_TOKENS['merchantId']}/transactions?limit=10"
+        headers = {
+            "token": f"{BHARATPE_TOKENS['token']}",
+            "Content-Type": "application/json"
+        }
         response = requests.get(url, headers=headers, timeout=8)
         if response.status_code == 200:
-            # Pura response data text (string) format me badalna
             response_text = response.text
             clean_utr = str(target_utr).strip()
             
-            # Agar user ka bhejha hua 12-digit UTR data me kahin bhi maujud hai, toh pass!
+            # Pure text response me match dhundhna
             if clean_utr in response_text:
                 return True
         elif response.status_code == 401:
-            bot.send_message(ADMIN_ID, "⚠️ Alert: Aapka BharatPe Session Token expire ho gaya hai! Kripya naya token dalein.")
+            bot.send_message(ADMIN_ID, "⚠️ Alert: BharatPe Token Expire ho gaya hai!")
     except Exception as e:
-        print(f"BharatPe API Error: {e}")
+        print(f"API Connection Error: {e}")
     return False
+
+def process_utr(message, amount, token):
+    try:
+        utr = message.text.strip()
+        
+        if len(utr) != 12 or not utr.isdigit():
+            bot.reply_to(message, "❌ *Galt UTR!* Kripya 12-digit ka UTR number dobara sahi se bhejein.", parse_mode="Markdown")
+            return
+
+        bot.reply_to(message, "⏳ *Apka UTR BharatPe server par verify ho raha hai... (Takes 8s)*", parse_mode="Markdown")
+        time.sleep(8)
+
+        # Safe calling process
+        is_valid_payment = verify_bharatpe_payment(amount, utr)
+        status_text = "✅ Verified & Delivered" if is_valid_payment else "❌ Fake/Unpaid"
+        
+        admin_caption = f"🔔 *New UTR Submitted!*\n\n👤 *User:* {message.from_user.first_name} (`{message.from_user.id}`)\n💰 *Amount:* ₹{amount}\n🧾 *UTR:* `{utr}`\n⚙ *Status:* {status_text}"
+        bot.send_message(ADMIN_ID, admin_caption, parse_mode="Markdown")
+
+        if is_valid_payment:
+            bot.reply_to(message, "✅ *Payment Successful!* Aapka media deliver kiya ja raha hai:", parse_mode="Markdown")
+            media_data = saved_links.get(token, {})
+            
+            for photo_id in media_data.get("photos", []):
+                try: bot.send_photo(message.chat.id, photo_id)
+                except: pass
+            for video_id in media_data.get("videos", []):
+                try: bot.send_video(message.chat.id, video_id)
+                except: pass
+        else:
+            bot.reply_to(message, "❌ *Apka payment receive nhi hua!*\nPlease try again....", parse_mode="Markdown")
+            
+    except Exception as e:
+        # Yeh line bot ko kabhi crash nahi hone degi, error screen par dikha degi
+        bot.reply_to(message, f"❌ Internal Processing Error: {str(e)}")
+
+# ====================================================================
 
 # Flask Keep-Alive Routing
 @app.route('/')
