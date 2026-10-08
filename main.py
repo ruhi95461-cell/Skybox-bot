@@ -96,17 +96,6 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# Flask Keep-Alive Routing
-@app.route('/')
-def home():
-    return "Skybox Bot is Running Online!"
-
-def run():
-    app.run(host='0.0.0.0', port=8080)
-
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
 # Debug Message: Photo/Video bhejne par File ID nikalna
 @bot.message_handler(content_types=['photo', 'video'])
 def handle_docs(message):
@@ -117,18 +106,6 @@ def handle_docs(message):
         elif message.content_type == 'video':
             file_id = message.video.file_id
             bot.reply_to(message, f"🎥 VIDEO FILE ID:\n{file_id}", parse_mode="Markdown")
-
-# Admin Session Renewer Command
-@bot.message_handler(commands=['renew'])
-def renew_session(message):
-    if message.from_user.id == ADMIN_ID:
-        try:
-            args = message.text.split(" ")
-            BHARATPE_TOKENS['token'] = args[1]
-            BHARATPE_TOKENS['merchantId'] = args[2]
-            bot.reply_to(message, "✅ BharatPe Credentials Successfully Updated!", parse_mode="Markdown")
-        except:
-            bot.reply_to(message, "❌ Format Galt Hai!\nUse: /renew <token> <merchantId>", parse_mode="Markdown")
 
 # --- ADMIN COMMAND: Automatic Gateway Link Generate Karein ---
 @bot.message_handler(commands=['gen'])
@@ -229,7 +206,6 @@ def start_payment(message):
 @bot.callback_query_handler(func=lambda call: call.data.startswith("sub_"))
 def trigger_utr_input(call):
     try:
-        # FIX: maxsplit=2 kiya hai taaki lamba token perfectly split ho bina crash kiye
         data_parts = call.data.split("_", 2)
         amount = data_parts[1]
         token = data_parts[2]
@@ -244,7 +220,6 @@ def process_utr(message, amount, token):
     try:
         utr = message.text.strip()
         
-        # Check agar UTR valid format me hai (12 digits aur sirf numbers)
         if len(utr) != 12 or not utr.isdigit():
             bot.reply_to(message, "❌ *Galt UTR!* Kripya 12-digit ka UTR number dobara sahi se bhejein.", parse_mode="Markdown")
             return
@@ -252,27 +227,22 @@ def process_utr(message, amount, token):
         bot.reply_to(message, "⏳ *Apka UTR BharatPe server par verify ho raha hai... (Takes 8s)*", parse_mode="Markdown")
         time.sleep(8)
 
-        # Direct BharatPe Live Verification check
+        # BharatPe dynamic evaluation check
         is_valid_payment = verify_bharatpe_payment(amount, utr)
-
-        # Admin Alert Notification Text
         status_text = "✅ Verified & Delivered" if is_valid_payment else "❌ Fake/Unpaid"
         
-        # FIX: Triple quotes use kiya hai taaki safe concatenation ho aur text parse crash na ho
+        # FIXED: Line 264 ke format crash ko triple quotes me sahi kar diya hai
         admin_caption = f"""🔔 *New UTR Submitted!*
 
 👤 *User:* {message.from_user.first_name} (`{message.from_user.id}`)
 💰 *Amount:* ₹{amount}
 🧾 *UTR:* `{utr}`
-⚙ *Status:* {status_text}"""
+⚙️ *Status:* {status_text}"""
         
-        # Admin ko report bhejna
         bot.send_message(ADMIN_ID, admin_caption, parse_mode="Markdown")
 
         if is_valid_payment:
             bot.reply_to(message, "✅ *Payment Successful!* Aapka media niche deliver kiya ja raha hai:", parse_mode="Markdown")
-            
-            # Ek-ek karke saari photos aur videos deliver karna
             media_data = saved_links.get(token, {})
             
             for photo_id in media_data.get("photos", []):
@@ -296,8 +266,6 @@ def process_utr(message, amount, token):
 
 # Main Execution Control Loop
 if __name__ == '__main__':
-    # Flask app ko background thread me chalana
     keep_alive()
     print("🤖 Skybox Bot is launching now...")
-    # Bot polling start karna bina crash huye
     bot.infinity_polling()
