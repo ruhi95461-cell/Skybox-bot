@@ -190,27 +190,128 @@ def start_payment(message):
             bot.reply_to(message, "👋 Welcome to Skybox Bot!")
     except Exception as e:
         bot.reply_to(message, f"❌ System Error: {str(e)}")
-# Callback for UTR Submission Trigger & Core UTR Processing logic
+
+# Callback for UTR Submission Trigger
 @bot.callback_query_handler(func=lambda call: call.data.startswith("sub_"))
 def trigger_utr_input(call):
-    # Handles UTR input prompt registration
-    pass
+    try:
+        data_parts = call.data.split("_", 2)
+        amount = data_parts[1]
+        token = data_parts[2]
+        msg = bot.send_message(call.message.chat.id, "✍ *Ab apna 12-digit ka UTR number yahan type karke bhejein:*", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, process_utr, amount, token)
+    except Exception as e:
+        print(f"Callback Error: {e}")
 
+# Core Logic: Manual Control + App Auto Backup Verification
 def process_utr(message, amount, token):
-    # Verifies 12-digit UTR, checks system auto-verification or alerts admin
-    pass
+    try:
+        utr = message.text.strip()
+        if len(utr) != 12 or not utr.isdigit():
+            bot.reply_to(message, "❌ *Galt UTR!* 12-digit ka number sahi se bhejein.", parse_mode="Markdown")
+            return
 
-# Admin Manual Click Actions Handler & Media Delivery
+        chat_id = message.chat.id
+        
+        # 1. PEHLE CHECK KARO: Kya Android App ne ye UTR pehle hi fetch kar liya hai?
+        if utr in received_payments:
+            bot.reply_to(message, "✅ *Payment Verified via System!* Delivery shuru...", parse_mode="Markdown")
+            deliver_media(chat_id, token)
+            del received_payments[utr]
+            return
+
+        # 2. AGAR APP SE NAHI MILA: Toh isko Pending list me daalo aur Admin ko alert karo
+        pending_claims[utr] = {"chat_id": chat_id, "token": token}
+        bot.reply_to(message, "⏳ *Aapka UTR check kiya ja raha hai...* Admin ke response ya app auto-verification ka wait karein.", parse_mode="Markdown")
+
+        # Admin Verification Keyboard
+        admin_markup = telebot.types.InlineKeyboardMarkup()
+        approve_btn = telebot.types.InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app_{utr}")
+        reject_btn = telebot.types.InlineKeyboardButton("❌ Reject", callback_data=f"adm_rej_{utr}")
+        admin_markup.row(approve_btn, reject_btn)
+
+        admin_caption = f"""🔔 *Manual Alert: New Payment Claim!*
+
+👤 *User:* {message.from_user.first_name} (`{chat_id}`)
+💰 *Expected Amount:* ₹{amount}
+🧾 *Submitted UTR:* `{utr}`
+
+*Action:* Agar aap online hain toh check karke manually Approve karein, warna phone app notification aate hi ye khud verify ho jayega."""
+        
+        bot.send_message(ADMIN_ID, admin_caption, parse_mode="Markdown", reply_markup=admin_markup)
+            
+    except Exception as e:
+        bot.reply_to(message, f"❌ UTR Process Error: {str(e)}")
+
+# Admin Manual Click Actions Handler (FIXED DATA CLEAR & PARSING)
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_"))
 def handle_admin_decision(call):
-    # Processes admin approve/reject actions and cleans memory
-    pass
+    try:
+        action_parts = call.data.split("_")
+        action = action_parts[1]
+        utr = action_parts[2]
 
+        if utr not in pending_claims:
+            bot.answer_callback_query(call.id, "⚠ Yeh request pehle hi process ho chuki hai (Ya expired).")
+            return
+
+        user_chat_id = pending_claims[utr]["chat_id"]
+        user_token = pending_claims[utr]["token"]
+
+        if action == "app":
+            bot.send_message(user_chat_id, "✅ *Payment Successful!* Admin ne aapki request approve kar di hai. Media deliver ho raha hai:", parse_mode="Markdown")
+            deliver_media(user_chat_id, user_token)
+            bot.edit_message_text(f"✅ Aapne UTR `{utr}` ko manually *Approve* kar diya.", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+        
+        elif action == "rej":
+            bot.send_message(user_chat_id, "❌ *Payment Rejected!* Aapka UTR admin dwara decline kar diya gaya hai.", parse_mode="Markdown")
+            bot.edit_message_text(f"❌ Aapne UTR `{utr}` ko *Reject* kar diya.", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+        
+        # Safe memory cleanup dono condition ke baad
+        del pending_claims[utr]
+
+    except Exception as e:
+        print(f"Admin Callback Error: {e}")
+
+# Media delivery execution helper function with Smart Fallback Mechanism
 def deliver_media(chat_id, token):
-    # Sends photos and videos with fallback matching
-    pass
+    try:
+        media_data = {}
+        # 1. Check if token maps directly to data package
+        if token in saved_links:
+            media_data = saved_links[token]
+        else:
+            # 2. Smart Match Fallback: Agar token custom string hai, to use hardcoded asset pack pe bypass karo
+            if "a22f0e8295ff" in saved_links:
+                media_data = saved_links["a22f0e8295ff"]
+
+        # Photos sending mechanism loop
+        for photo_id in media_data.get("photos", []):
+            try:
+                bot.send_photo(chat_id, photo_id)
+                time.sleep(1)
+            except Exception as e:
+                print(f"Photo delivery failed: {e}")
+
+        # Videos sending mechanism loop
+        for video_id in media_data.get("videos", []):
+            try:
+                bot.send_video(chat_id, video_id)
+                time.sleep(1)
+            except Exception as e:
+                print(f"Video delivery failed: {e}")
+                
+    except Exception as main_e:
+        print(f"Global Delivery Error: {main_e}")
 
 # Main Execution Control Loop
 if __name__ == '__main__':
-    # Starts background server and bot infinity polling
-    pass
+    try:
+        # Flask server ko background thread me chalana
+        keep_alive()
+        print("🤖 Skybox Bot is launching now on Render...")
+        
+        # Telegram bot polling start karna bina crash huye
+        bot.infinity_polling(timeout=10, long_polling_timeout=5)
+    except Exception as e:
+        print(f"🔴 Main Loop Error: {e}")
