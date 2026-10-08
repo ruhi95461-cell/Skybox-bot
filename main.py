@@ -87,16 +87,34 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# Debug Message: Photo/Video file ID extracter
+# 🟢 UPDATED DEBUG SYSTEM: Photo/Video bhejne par instant copy-paste JSON block dega
 @bot.message_handler(content_types=['photo', 'video'])
 def handle_docs(message):
     if message.from_user.id == ADMIN_ID:
         if message.content_type == 'photo':
+            # Sabse highest quality ki photo ki File ID nikalna
             file_id = message.photo[-1].file_id
-            bot.reply_to(message, f"📸 PHOTO FILE ID:\n{file_id}", parse_mode="Markdown")
+            
+            # Aapko direct copy-paste format dene ke liye response text
+            reply_text = (
+                f"📸 *PHOTO FILE ID DETECTED!*\n\n"
+                f"`{file_id}`\n\n"
+                f"📝 *GitHub JSON code me aise jodein:*\n"
+                f'`"{file_id}",`'
+            )
+            bot.reply_to(message, reply_text, parse_mode="Markdown")
+            
         elif message.content_type == 'video':
             file_id = message.video.file_id
-            bot.reply_to(message, f"🎥 VIDEO FILE ID:\n{file_id}", parse_mode="Markdown")
+            
+            reply_text = (
+                f"🎥 *VIDEO FILE ID DETECTED!*\n\n"
+                f"`{file_id}`\n\n"
+                f"📝 *GitHub JSON code me aise jodein:*\n"
+                f'`"{file_id}",`'
+            )
+            bot.reply_to(message, reply_text, parse_mode="Markdown")
+
 
 # Link Generator Command
 @bot.message_handler(commands=['gen'])
