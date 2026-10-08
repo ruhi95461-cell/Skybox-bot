@@ -237,3 +237,15 @@ def handle_admin_decision(call):
 def deliver_media(chat_id, token):
     media_data = saved_links.get(token, {})
     for photo_id in media_data.get("photos", []):
+
+# Main Execution Control Loop
+if __name__ == '__main__':
+    try:
+        # Flask server ko background thread me chalana
+        keep_alive()
+        print("🤖 Skybox Bot is launching now on Render...")
+        
+        # Telegram bot polling start karna bina crash huye
+        bot.infinity_polling(timeout=10, long_polling_timeout=5)
+    except Exception as e:
+        print(f"🔴 Main Loop Error: {e}")
