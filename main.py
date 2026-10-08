@@ -1,8 +1,8 @@
 import telebot
 import time
-import requests
 import secrets
-from flask import Flask
+import os  # 🟢 Render ke PORT ke liye zaroori hai
+from flask import Flask, request, jsonify
 from threading import Thread
 import io
 import qrcode
@@ -16,14 +16,19 @@ BOT_USERNAME = "SkyBoxx_bot"
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
 
-# Permanent Links Storage (Manually edit karne ke liye)
+# Memory Storage for tracking payments and pending user requests
+received_payments = {}  # Format: {"UTR_NUMBER": amount}
+pending_claims = {}     # Format: {"UTR_NUMBER": {"chat_id": 123, "token": "xyz"}}
+
+# Permanent Links Storage
 saved_links = {
     "932897e02459b3804b75": {
-    "amount": 65.0,
-    "photos": [],
-    "videos": []
+        "amount": 65.0,
+        "photos": [],
+        "videos": []
     },
 }
+
 # UPI QR Code Generator
 def generate_upi_qr(upi_id, amount):
     upi_url = f"upi://pay?pa={upi_id}&am={amount}&cu=INR"
@@ -37,47 +42,52 @@ def generate_upi_qr(upi_id, amount):
     img_byte_arr.seek(0)
     return img_byte_arr
 
-# BHARATPE LIVE TRANSACTION CHECKER
-def verify_bharatpe_payment(target_amount, target_utr):
-    """
-    Direct BharatPe ke enterprise server se transactions fetch karke
-    Pure response text me UTR search karta hai taaki structure mismatch na ho.
-    """
-    # 100% Sahi URL aur Slash Setup
-    url = f"https://bharatpe.in/{BHARATPE_TOKENS['merchantId']}/transactions?limit=10"
-    
-    headers = {
-        "token": f"{BHARATPE_TOKENS['token']}",
-        "Content-Type": "application/json"
-    }
+# 🌐 FLASK WEBHOOK: Android App Se Payment Notification Receive Karne Ke Liye
+@app.route('/webhook', methods=['POST'])
+def receive_notification():
     try:
-        response = requests.get(url, headers=headers, timeout=8)
-        if response.status_code == 200:
-            # Pura response data text (string) format me badalna
-            response_text = response.text
-            clean_utr = str(target_utr).strip()
+        data = request.json  # App se JSON data aayega
+        notification_text = data.get("text", "")
+        
+        # Logic: Text se 12-digit UTR aur Amount extract karna
+        import re
+        utr_match = re.search(r'\b\d{12}\b', notification_text)
+        amount_match = re.search(r'(?:Rs\.?|INR)\s*(\d+(?:\.\d+)?)', notification_text, re.IGNORECASE)
+        
+        if utr_match:
+            utr = utr_match.group(0)
+            amount = float(amount_match.group(1)) if amount_match else 0.0
             
-            # Agar user ka bhejha hua 12-digit UTR data me kahin bhi maujud hai, toh pass!
-            if clean_utr in response_text:
-                return True
-        elif response.status_code == 401:
-            bot.send_message(ADMIN_ID, "⚠️ Alert: Aapka BharatPe Session Token expire ho gaya hai! Kripya naya token dalein.")
+            # Payment ko local database me save karlo
+            received_payments[utr] = amount
+            
+            # System Check: Offline Auto-Verification
+            if utr in pending_claims:
+                claim_data = pending_claims[utr]
+                deliver_media(claim_data["chat_id"], claim_data["token"])
+                bot.send_message(claim_data["chat_id"], "✅ *Payment Auto-Verified!* Aapka media deliver kar diya gaya hai.", parse_mode="Markdown")
+                bot.send_message(ADMIN_ID, f"🤖 *Auto-Verified:* UTR `{utr}` ka payment app se verify karke user ko deliver kar diya gaya.")
+                del pending_claims[utr]
+                
+            return jsonify({"status": "success"}), 200
     except Exception as e:
-        print(f"BharatPe API Error: {e}")
-    return False
+        print(f"Webhook Error: {e}")
+    return jsonify({"status": "failed"}), 400
 
-# Flask Keep-Alive Routing
 @app.route('/')
 def home():
-    return "Skybox Bot is Running Online!"
+    return "Skybox Bot is Running Online on Render!"
 
 def run():
-    app.run(host='0.0.0.0', port=8080)
+    # 🟢 FIX FOR RENDER: Render port dynamic allocate karta hai, isliye os.environ use kiya
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
 
 def keep_alive():
     t = Thread(target=run)
     t.start()
-# Debug Message: Photo/Video bhejne par File ID nikalna
+
+# Debug Message: Photo/Video file ID extracter
 @bot.message_handler(content_types=['photo', 'video'])
 def handle_docs(message):
     if message.from_user.id == ADMIN_ID:
@@ -88,19 +98,7 @@ def handle_docs(message):
             file_id = message.video.file_id
             bot.reply_to(message, f"🎥 VIDEO FILE ID:\n{file_id}", parse_mode="Markdown")
 
-# Admin Session Renewer Command
-@bot.message_handler(commands=['renew'])
-def renew_session(message):
-    if message.from_user.id == ADMIN_ID:
-        try:
-            args = message.text.split(" ")
-            BHARATPE_TOKENS['token'] = args[1]
-            BHARATPE_TOKENS['merchantId'] = args[2]
-            bot.reply_to(message, "✅ BharatPe Credentials Successfully Updated!", parse_mode="Markdown")
-        except:
-            bot.reply_to(message, "❌ Format Galt Hai!\nUse: /renew <token> <merchantId>", parse_mode="Markdown")
-
-# --- ADMIN COMMAND: Link Generate Karein ---
+# Link Generator Command
 @bot.message_handler(commands=['gen'])
 def generate_link(message):
     if message.from_user.id != ADMIN_ID:
@@ -115,26 +113,16 @@ def generate_link(message):
         bot.reply_to(message, "❌ Invalid amount!", parse_mode="Markdown")
         return
 
-    # Check karna ki amount pehle se saved links me hai ya nahi
     for token, data in saved_links.items():
         if isinstance(data, dict) and data.get("amount") == amount:
-            old_link = f"https://t.me_{token}"
+            old_link = f"https://t.me{BOT_USERNAME}?start=resell_{token}"
             bot.reply_to(message, f"⚠ ₹{amount} ka link pehle se bana hai:\n`{old_link}`", parse_mode="Markdown")
             return
 
     unique_token = secrets.token_hex(6)
-    
-    # Aapke script ke structural format ke mutabik data save karna
-    saved_links[unique_token] = {
-        "amount": amount,
-        "photos": [],
-        "videos": []
-    }
-
-    # Aapka exact working link format jo aapne script me dala hai
-    link = f"https://t.me/{BOT_USERNAME}?start=resell_{unique_token}"
-    
-    bot.reply_to(message, f"✅ *Link Generated:*\n\n`{link}`\n\n📝 Is token ko code me `saved_links` ke andar jod dena taaki permanent rahe:\n`\"{unique_token}\": {{\n    \"amount\": {amount},\n    \"photos\": [],\n    \"videos\": []\n}},`", parse_mode="Markdown")
+    saved_links[unique_token] = {"amount": amount, "photos": [], "videos": []}
+    link = f"https://t.me{BOT_USERNAME}?start=resell_{unique_token}"
+    bot.reply_to(message, f"✅ *Link Generated:*\n\n`{link}`", parse_mode="Markdown")
 
 # User Checkout (/start)
 @bot.message_handler(commands=['start'])
@@ -145,29 +133,24 @@ def start_payment(message):
         
         if text_args.startswith("resell_"):
             token = text_args.replace("resell_", "").strip()
-            
             if token in saved_links:
                 amount = saved_links[token]["amount"]
                 qr_img = generate_upi_qr(YOUR_UPI_ID, amount)
                 
                 caption_text = (
-                    f"Pay ₹{amount} for the item\n\n"
-                    f"📌 UPI ID — {YOUR_UPI_ID}\n\n"
-                    f"⚠️ Instructions:\n"
-                    f"1. QR Code scan karke exact ₹{amount} pay karein.\n"
-                    f"2. Payment karne ke baad Submit UTR button par click karein aur 12-digit ka UTR number bhejein."
+                    f"Pay ₹{amount} for the item\n\n📌 UPI ID — {YOUR_UPI_ID}\n\n"
+                    f"⚠️ Instructions:\n1. QR Code scan karke exact ₹{amount} pay karein.\n"
+                    f"2. Pay karke Submit UTR par click karein aur 12-digit UTR bhejein."
                 )
                 
                 markup = telebot.types.InlineKeyboardMarkup()
                 btn = telebot.types.InlineKeyboardButton("📥 Submit UTR", callback_data=f"sub_{amount}_{token}")
                 markup.add(btn)
-                
                 bot.send_photo(message.chat.id, qr_img, caption=caption_text, reply_markup=markup)
             else:
-                bot.reply_to(message, "❌ Yeh link invalid hai ya expire ho chuka hai.")
+                bot.reply_to(message, "❌ Yeh link invalid hai.")
         else:
             bot.reply_to(message, "👋 Welcome to Skybox Bot!")
-            
     except Exception as e:
         bot.reply_to(message, f"❌ System Error: {str(e)}")
 
@@ -175,70 +158,85 @@ def start_payment(message):
 @bot.callback_query_handler(func=lambda call: call.data.startswith("sub_"))
 def trigger_utr_input(call):
     try:
-        # FIX: maxsplit=2 kiya hai taaki lamba token perfectly split ho bina crash kiye
         data_parts = call.data.split("_", 2)
         amount = data_parts[1]
         token = data_parts[2]
-        
         msg = bot.send_message(call.message.chat.id, "✍ *Ab apna 12-digit ka UTR number yahan type karke bhejein:*", parse_mode="Markdown")
         bot.register_next_step_handler(msg, process_utr, amount, token)
     except Exception as e:
         print(f"Callback Error: {e}")
 
-# Core Logic: UTR Processing & Real Verification
+# Core Logic: Manual Control + App Auto Backup Verification
 def process_utr(message, amount, token):
     try:
         utr = message.text.strip()
-        
-        # Check agar UTR valid format me hai (12 digits aur sirf numbers)
         if len(utr) != 12 or not utr.isdigit():
-            bot.reply_to(message, "❌ *Galt UTR!* Kripya 12-digit ka UTR number dobara sahi se bhejein.", parse_mode="Markdown")
+            bot.reply_to(message, "❌ *Galt UTR!* 12-digit ka number sahi se bhejein.", parse_mode="Markdown")
             return
 
-        bot.reply_to(message, "⏳ *Apka UTR BharatPe server par verify ho raha hai... (Takes 8s)*", parse_mode="Markdown")
-        time.sleep(8)
-
-        # Direct BharatPe Live Verification check
-        is_valid_payment = verify_bharatpe_payment(amount, utr)
-
-        # Admin Alert Notification Text
-        status_text = "✅ Verified & Delivered" if is_valid_payment else "❌ Fake/Unpaid"
+        chat_id = message.chat.id
         
-        # FIX: Triple quotes use kiya hai taaki safe concatenation ho aur text parse crash na ho
-        admin_caption = f"""🔔 *New UTR Submitted!*
+        # 1. PEHLE CHECK KARO: Kya Android App ne ye UTR pehle hi fetch kar liya hai?
+        if utr in received_payments:
+            bot.reply_to(message, "✅ *Payment Verified via System!* Delivery shuru...", parse_mode="Markdown")
+            deliver_media(chat_id, token)
+            del received_payments[utr]
+            return
 
-👤 *User:* {message.from_user.first_name} (`{message.from_user.id}`)
-💰 *Amount:* ₹{amount}
-🧾 *UTR:* `{utr}`
-⚙ *Status:* {status_text}"""
+        # 2. AGAR APP SE NAHI MILA: Toh isko Pending list me daalo aur Admin ko alert karo
+        pending_claims[utr] = {"chat_id": chat_id, "token": token}
+        bot.reply_to(message, "⏳ *Aapka UTR check kiya ja raha hai...* Admin ke response ya app auto-verification ka wait karein.", parse_mode="Markdown")
+
+        # Admin Verification Keyboard
+        admin_markup = telebot.types.InlineKeyboardMarkup()
+        approve_btn = telebot.types.InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app_{utr}")
+        reject_btn = telebot.types.InlineKeyboardButton("❌ Reject", callback_data=f"adm_rej_{utr}")
+        admin_markup.row(approve_btn, reject_btn)
+
+        admin_caption = f"""🔔 *Manual Alert: New Payment Claim!*
+
+👤 *User:* {message.from_user.first_name} (`{chat_id}`)
+💰 *Expected Amount:* ₹{amount}
+🧾 *Submitted UTR:* `{utr}`
+
+*Action:* Agar aap online hain toh check karke manually Approve karein, warna phone app notification aate hi ye khud verify ho jayega."""
         
-        # Admin ko report bhejna
-        bot.send_message(ADMIN_ID, admin_caption, parse_mode="Markdown")
-
-        if is_valid_payment:
-            bot.reply_to(message, "✅ *Payment Successful!* Aapka media niche deliver kiya ja raha hai:", parse_mode="Markdown")
-            
-            # Ek-ek karke saari photos aur videos deliver karna
-            media_data = saved_links.get(token, {})
-            
-            for photo_id in media_data.get("photos", []):
-                try:
-                    bot.send_photo(message.chat.id, photo_id)
-                    time.sleep(1)
-                except Exception as e:
-                    print(f"Photo delivery failed: {e}")
-                    
-            for video_id in media_data.get("videos", []):
-                try:
-                    bot.send_video(message.chat.id, video_id)
-                    time.sleep(1)
-                except Exception as e:
-                    print(f"Video delivery failed: {e}")
-        else:
-            bot.reply_to(message, "❌ *Apka payment receive nhi hua!*\nPlease try again....", parse_mode="Markdown")
+        bot.send_message(ADMIN_ID, admin_caption, parse_mode="Markdown", reply_markup=admin_markup)
             
     except Exception as e:
         bot.reply_to(message, f"❌ UTR Process Error: {str(e)}")
+
+# Admin Manual Click Actions Handler
+@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_"))
+def handle_admin_decision(call):
+    try:
+        action_parts = call.data.split("_")
+        action = action_parts[1]
+        utr = action_parts[2]
+        
+        if utr not in pending_claims:
+            bot.answer_callback_query(call.id, "⚠️ Yeh request pehle hi process ho chuki hai (Ya expired).")
+            return
+
+        user_chat_id = pending_claims[utr]["chat_id"]
+        user_token = pending_claims[utr]["token"]
+
+        if action == "app":
+            bot.send_message(user_chat_id, "✅ *Payment Successful!* Admin ne aapki request approve kar di hai. Media deliver ho raha hai:", parse_mode="Markdown")
+            deliver_media(user_chat_id, user_token)
+            bot.edit_message_text(f"✅ Aapne UTR `{utr}` ko manually *Approve* kar diya.", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+        elif action == "rej":
+            bot.send_message(user_chat_id, "❌ *Payment Rejected!* Aapka UTR admin dwara decline kar diya gaya hai.", parse_mode="Markdown")
+            bot.edit_message_text(f"❌ Aapne UTR `{utr}` ko *Reject* kar diya.", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+
+        del pending_claims[utr]
+    except Exception as e:
+        print(f"Admin Callback Error: {e}")
+
+# Media delivery execution helper function
+def deliver_media(chat_id, token):
+    media_data = saved_links.get(token, {})
+    for photo_id in media_data.get("photos", []):
 
 # Main Execution Control Loop
 if __name__ == '__main__':
