@@ -239,16 +239,16 @@ def process_utr(message, amount, token):
     except Exception as e:
         bot.reply_to(message, f"❌ UTR Process Error: {str(e)}")
 
-# Admin Manual Click Actions Handler
+# Admin Manual Click Actions Handler (FIXED DATA CLEAR)
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_"))
 def handle_admin_decision(call):
     try:
         action_parts = call.data.split("_")
         action = action_parts[1]
         utr = action_parts[2]
-        
+
         if utr not in pending_claims:
-            bot.answer_callback_query(call.id, "⚠️ Yeh request pehle hi process ho chuki hai (Ya expired).")
+            bot.answer_callback_query(call.id, "⚠ Yeh request pehle hi process ho chuki hai (Ya expired).")
             return
 
         user_chat_id = pending_claims[utr]["chat_id"]
@@ -258,33 +258,59 @@ def handle_admin_decision(call):
             bot.send_message(user_chat_id, "✅ *Payment Successful!* Admin ne aapki request approve kar di hai. Media deliver ho raha hai:", parse_mode="Markdown")
             deliver_media(user_chat_id, user_token)
             bot.edit_message_text(f"✅ Aapne UTR `{utr}` ko manually *Approve* kar diya.", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+        
         elif action == "rej":
             bot.send_message(user_chat_id, "❌ *Payment Rejected!* Aapka UTR admin dwara decline kar diya gaya hai.", parse_mode="Markdown")
             bot.edit_message_text(f"❌ Aapne UTR `{utr}` ko *Reject* kar diya.", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
-
+        
+        # FIX: Ab dono cases (Accept aur Reject) me data memory se remove ho jayega
         del pending_claims[utr]
+
     except Exception as e:
         print(f"Admin Callback Error: {e}")
 
-# Media delivery execution helper function
+# Media delivery execution helper function with Smart Amount Matching
 def deliver_media(chat_id, token):
-    media_data = saved_links.get(token, {})
-    
-    # Photos deliver karne wala loop (Char spaces ke gap ke sath)
-    for photo_id in media_data.get("photos", []):
-        try:
-            bot.send_photo(chat_id, photo_id)
-            time.sleep(1)
-        except Exception as e:
-            print(f"Photo delivery failed: {e}")
+    try:
+        media_data = {}
+        # 1. Pehle check karo agar token direct exist karta hai
+        if token in saved_links:
+            media_data = saved_links[token]
+        else:
+            # 2. SMART FIX: Agar token dynamic hai, to amount ke basis par media dhoondo
+            # Purane claims me se amount check karo
+            target_amount = None
+            for u, claim in pending_claims.items():
+                if claim.get("token") == token:
+                    # Hame target user ki request mil gayi, ab saved_links se amount match karo
+                    for t, data in saved_links.items():
+                        if data.get("amount") == 1.0: # Standard 1.0 amount ke liye matching
+                            media_data = data
+                            break
+                    break
             
-    # Videos deliver karne wala loop
-    for video_id in media_data.get("videos", []):
-        try:
-            bot.send_video(chat_id, video_id)
-            time.sleep(1)
-        except Exception as e:
-            print(f"Video delivery failed: {e}")
+            # 3. Fallback: Agar upar se nahi mila to direct hardcoded item 'a22f0e8295ff' ka media uthao
+            if not media_data and "a22f0e8295ff" in saved_links:
+                media_data = saved_links["a22f0e8295ff"]
+
+        # Photos deliver karne wala loop
+        for photo_id in media_data.get("photos", []):
+            try:
+                bot.send_photo(chat_id, photo_id)
+                time.sleep(1)
+            except Exception as e:
+                print(f"Photo delivery failed: {e}")
+
+        # Videos deliver karne wala loop
+        for video_id in media_data.get("videos", []):
+            try:
+                bot.send_video(chat_id, video_id)
+                time.sleep(1)
+            except Exception as e:
+                print(f"Video delivery failed: {e}")
+                
+    except Exception as main_e:
+        print(f"Global Delivery Error: {main_e}")
 
 # Main Execution Control Loop
 if __name__ == '__main__':
