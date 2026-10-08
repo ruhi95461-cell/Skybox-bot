@@ -22,9 +22,10 @@ pending_claims = {}     # Format: {"UTR_NUMBER": {"chat_id": 123, "token": "xyz"
 
 # Permanent Links Storage
 saved_links = {
-    "932897e02459b3804b75": {
-        "amount": 65.0,
-        "photos": [],
+    "a22f0e8295ff": {
+        "amount": 1.0,
+        "photos": ["AgACAgUAAxkBAAIE8mrH-hLUr52qEEAaT2hHIyHA3j43AAJpEWsbLNxBVgiUcJneb6qvAQADAgADeQADPQQ"
+                  "AgACAgUAAxkBAAIE82rH-hLQsA9vJzBtH-b7vygRlhrtAAJoEWsbLNxBVsKuxQJbbktfAQADAgADeQADPQQ"],
         "videos": []
     },
 }
