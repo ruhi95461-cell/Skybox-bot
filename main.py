@@ -236,7 +236,22 @@ def handle_admin_decision(call):
 # Media delivery execution helper function
 def deliver_media(chat_id, token):
     media_data = saved_links.get(token, {})
+    
+    # Photos deliver karne wala loop (Char spaces ke gap ke sath)
     for photo_id in media_data.get("photos", []):
+        try:
+            bot.send_photo(chat_id, photo_id)
+            time.sleep(1)
+        except Exception as e:
+            print(f"Photo delivery failed: {e}")
+            
+    # Videos deliver karne wala loop
+    for video_id in media_data.get("videos", []):
+        try:
+            bot.send_video(chat_id, video_id)
+            time.sleep(1)
+        except Exception as e:
+            print(f"Video delivery failed: {e}")
 
 # Main Execution Control Loop
 if __name__ == '__main__':
