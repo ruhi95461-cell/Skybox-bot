@@ -10,6 +10,7 @@ import qrcode
 BOT_TOKEN = "8963839676:AAHbkhulxdQOFUJBRcXRAhCuL1aDDElc4-s"
 ADMIN_ID = 8393210427
 YOUR_UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
+BOT_USERNAME = "SkyBoxx_bot"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
@@ -69,7 +70,7 @@ def generate_link(message):
 
     unique_token = secrets.token_hex(10)
     saved_links[unique_token] = {"amount": amount, "photos": [], "videos": []}
-    link = f"https://t.me_{unique_token}"
+    link = f"https://t.me/{BOT_USERNAME}?start=resell_{unique_token}"
     
     response_text = f"🔗 <b>Naya Payment Link Taiyar Hai:</b>\n{link}"
     bot.reply_to(message, response_text, parse_mode="HTML")
