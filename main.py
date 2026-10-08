@@ -237,11 +237,3 @@ def handle_admin_decision(call):
 def deliver_media(chat_id, token):
     media_data = saved_links.get(token, {})
     for photo_id in media_data.get("photos", []):
-
-# Main Execution Control Loop
-if __name__ == '__main__':
-    # Flask app ko background thread me chalana
-    keep_alive()
-    print("🤖 Skybox Bot is launching now...")
-    # Bot polling start karna bina crash huye
-    bot.infinity_polling()
