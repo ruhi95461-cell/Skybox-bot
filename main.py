@@ -212,7 +212,7 @@ def generate_link(message):
     link = f"https://t.me/{BOT_USERNAME}?start=resell_{unique_token}"
     bot.reply_to(message, f"✅ *Link Generated:*\n\n`{link}`", parse_mode="Markdown")
 
-# 🟢 USER LINK CHECKOUT SYSTEM (Cleaned Premium Look)
+# USER LINK CHECKOUT SYSTEM (Cleaned Premium Look)
 @bot.message_handler(commands=['start'])
 def start_payment(message):
     try:
@@ -225,7 +225,7 @@ def start_payment(message):
             if token in saved_links:
                 base_amount = saved_links[token]["amount"]
                 
-                # Dynamic Unique Price Variant allocate karna (.01 se .99 ke beech)
+                # Dynamic Unique Price Variant
                 final_amount = get_unique_amount(base_amount, chat_id)
                 
                 # System storage me tracking params save karna
@@ -233,27 +233,28 @@ def start_payment(message):
                 
                 qr_img = generate_upi_qr(YOUR_UPI_ID, final_amount)
                 
-                # Cleaned Caption Text: Customer ko darane wale text aur UTR note saaf kar diye hain
                 caption_text = (
                     f"✨ *SkyBox Instant Checkout:*\n\n"
-                    f"💰 Pay Exact Amount: *₹{final_amount}*\n"
-                    f"📌 UPI ID: `{YOUR_UPI_ID}`\n\n"
+                    f"💰 *Pay Exact Amount:* ₹{final_amount}\n"
+                    f"📌 *UPI ID:* {YOUR_UPI_ID}\n\n"
                     f"⚠️ *Important Note:*\n"
-                    f"Aapko QR scan karke exact *₹{final_amount}* hi pay karna hai (Ek bhi paisa kam ya zyada mat karna) taaki aapka payment instantly verify ho sake."
+                    f"Aapko QR scan karke exact ₹{final_amount} hi pay karna hai "
+                    f"(Ek bhi paisa kam ya zyada mat karna) taaki aapka payment instantly verify ho sake."
                 )
                 
-                # 🟢 BACKUP SYSTEM BUTTON: Admin manual verification ke liye button jod diya hai
                 markup = telebot.types.InlineKeyboardMarkup()
-                backup_btn = telebot.types.InlineKeyboardButton("📥 Payment Done (Verify)", callback_data=f"adm_req_{final_amount}")
+                backup_btn = telebot.types.InlineKeyboardButton("📥 Payment Done (Verify)", callback_data=f"adm_req_{final_amount}_{chat_id}")
                 markup.add(backup_btn)
                 
                 bot.send_photo(chat_id, qr_img, caption=caption_text, reply_markup=markup, parse_mode="Markdown")
             else:
                 bot.reply_to(message, "❌ Link invalid hai.")
         else:
-            bot.reply_to(message, "👋 Welcome to Skybox Bot!")
+            # Agar normal /start aaya bina kisi payment token ke
+            bot.reply_to(message, "✨ *Welcome to Skybox Bot!* \n\nAapka swagat hai. Kisi bhi product ko buy karne ke liye official link ka use karein.", parse_mode="Markdown")
+            
     except Exception as e:
-        bot.reply_to(message, f"❌ System Error: {str(e)}")
+        bot.reply_to(message, f"❌ System Error: {e}")
 
 # 🟢 ADMIN FUNCTIONAL MANUAL BACKUP CALLBACK HANDLER
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_"))
