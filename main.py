@@ -216,42 +216,47 @@ def generate_link(message):
 @bot.message_handler(commands=['start'])
 def start_payment(message):
     try:
-        args = message.text.split()
-        text_args = args[1] if len(args) > 1 else ""
         chat_id = message.chat.id
+        msg_text = message.text.strip()
         
-        if text_args.startswith("resell_"):
-            token = text_args.replace("resell_", "").strip()
-            if token in saved_links:
-                base_amount = saved_links[token]["amount"]
+        # Check karenge ki kya user payment link se aaya hai (e.g., /start resell_a22f...)
+        if " " in msg_text:
+            token_part = msg_text.split(" ")[1]
+            if token_part.startswith("resell_"):
+                token = token_part.replace("resell_", "").strip()
                 
-                # Dynamic Unique Price Variant
-                final_amount = get_unique_amount(base_amount, chat_id)
-                
-                # System storage me tracking params save karna
-                pending_claims[final_amount] = {"chat_id": chat_id, "token": token, "timestamp": time.time()}
-                
-                qr_img = generate_upi_qr(YOUR_UPI_ID, final_amount)
-                
-                caption_text = (
-                    f"✨ *SkyBox Instant Checkout:*\n\n"
-                    f"💰 *Pay Exact Amount:* ₹{final_amount}\n"
-                    f"📌 *UPI ID:* {YOUR_UPI_ID}\n\n"
-                    f"⚠️ *Important Note:*\n"
-                    f"Aapko QR scan karke exact ₹{final_amount} hi pay karna hai "
-                    f"(Ek bhi paisa kam ya zyada mat karna) taaki aapka payment instantly verify ho sake."
-                )
-                
-                markup = telebot.types.InlineKeyboardMarkup()
-                backup_btn = telebot.types.InlineKeyboardButton("📥 Payment Done (Verify)", callback_data=f"adm_req_{final_amount}_{chat_id}")
-                markup.add(backup_btn)
-                
-                bot.send_photo(chat_id, qr_img, caption=caption_text, reply_markup=markup, parse_mode="Markdown")
-            else:
-                bot.reply_to(message, "❌ Link invalid hai.")
-        else:
-            # Agar normal /start aaya bina kisi payment token ke
-            bot.reply_to(message, "✨ *Welcome to Skybox Bot!* \n\nAapka swagat hai. Kisi bhi product ko buy karne ke liye official link ka use karein.", parse_mode="Markdown")
+                if token in saved_links:
+                    base_amount = saved_links[token]["amount"]
+                    
+                    # Dynamic Unique Price Variant
+                    final_amount = get_unique_amount(base_amount, chat_id)
+                    
+                    # System storage me tracking params save karna
+                    pending_claims[final_amount] = {"chat_id": chat_id, "token": token, "timestamp": time.time()}
+                    
+                    qr_img = generate_upi_qr(YOUR_UPI_ID, final_amount)
+                    
+                    caption_text = (
+                        f"✨ *SkyBox Instant Checkout:*\n\n"
+                        f"💰 *Pay Exact Amount:* ₹{final_amount}\n"
+                        f"📌 *UPI ID:* {YOUR_UPI_ID}\n\n"
+                        f"⚠️ *Important Note:*\n"
+                        f"Aapko QR scan karke exact ₹{final_amount} hi pay karna hai "
+                        f"(Ek bhi paisa kam ya zyada mat karna) taaki aapka payment instantly verify ho sake."
+                    )
+                    
+                    markup = telebot.types.InlineKeyboardMarkup()
+                    backup_btn = telebot.types.InlineKeyboardButton("📥 Payment Done (Verify)", callback_data=f"adm_req_{final_amount}_{chat_id}")
+                    markup.add(backup_btn)
+                    
+                    bot.send_photo(chat_id, qr_img, caption=caption_text, reply_markup=markup, parse_mode="Markdown")
+                    return
+                else:
+                    bot.reply_to(message, "❌ Link invalid hai.")
+                    return
+
+        # Agar normal /start aaya bina kisi payment token ke (e.g., direct search se)
+        bot.reply_to(message, "✨ *Welcome to Skybox Bot!* \n\nAapka swagat hai. Kisi bhi product ko buy karne ke liye official link ka use karein.", parse_mode="Markdown")
             
     except Exception as e:
         bot.reply_to(message, f"❌ System Error: {e}")
