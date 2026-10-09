@@ -17,8 +17,8 @@ bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
 
 # Memory Storage for tracking payments and pending user requests
-received_payments = {}  # Format: {"UTR_NUMBER": amount}
-pending_claims = {}     # Format: {"UTR_NUMBER": {"chat_id": 123, "token": "xyz"}}
+active_amounts = {}  # Format: {"chat_id": {"amount": 2.02, "timestamp": 169684000}}
+pending_claims = {}  # Format: {2.02: {"chat_id": 123, "token": "xyz", "timestamp": 169684000}}
 
 # Permanent Links Storage (Line 27 Fixed Comma Error)
 saved_links = {
@@ -44,51 +44,79 @@ def generate_upi_qr(upi_id, amount):
     img.save(img_byte_arr, format='PNG')
     img_byte_arr.seek(0)
     return img_byte_arr
+
+import random
+
+def get_unique_amount(base_amount, chat_id):
+    current_time = time.time()
     
-# 🌐 FLASK WEBHOOK: Android App Se Payment Notification Receive Karne Ke Liye
+    # 10 minute se purane pending slots ko free karne ke liye
+    expired_amounts = [amt for amt, data in list(pending_claims.items()) if current_time - data.get("timestamp", 0) > 600]
+    for amt in expired_amounts:
+        c_id = pending_claims[amt]["chat_id"]
+        if c_id in active_amounts: 
+            del active_amounts[c_id]
+        del pending_claims[amt]
+
+    if chat_id in active_amounts:
+        return active_amounts[chat_id]["amount"]
+        
+    for _ in range(100):
+        paise_variant = round(base_amount + (random.randint(1, 99) / 100), 2)
+        if paise_variant not in pending_claims:
+            active_amounts[chat_id] = {"amount": paise_variant, "timestamp": current_time}
+            return paise_variant
+            
+    return base_amount
+
+# 🌐 FLASK WEBHOOK: BharatPe App Notification Receiver (Bina UTR wala Naya Logic)
 @app.route('/webhook', methods=['POST'])
 def receive_notification():
     try:
-        data = request.json  # App se JSON data aayega
-        if not data:
-            return jsonify({"status": "success"}), 200  # App ko shaant rakhne ke liye
+        data = request.json
+        if not data: 
+            return jsonify({"status": "success"}), 200
             
         notification_text = data.get("text", "")
+        print(f"📥 BharatPe Push Received: {notification_text}")
         
-        # Background process ke liye alag function chalayenge taaki delay na ho
         def process_payment(text):
             try:
                 import re
-                # Optimized Regex: Yeh Rupees, Rs, INR aur direct digits sab handle karega
-                utr_match = re.search(r'\b\d{12}\b', text)
+                # Notification text se strict decimal amount nikalna (Jaise: 2.02)
+                amount_match = re.search(r'(?:Rs\.?|INR|Rupees|\b)\s*(\d+\.\d{2})', text, re.IGNORECASE)
                 
-                # BharatPe specific text "Received 1.00 Rupees" ko bhi match karega
-                amount_match = re.search(r'(?:Rs\.?|INR|Rupees|\b)\s*(\d+(?:\.\d+)?)', text, re.IGNORECASE)
-                
-                if utr_match:
-                    utr = utr_match.group(0)
-                    amount = float(amount_match.group(1)) if amount_match else 0.0
+                if not amount_match:
+                    # Fallback agar text me .00 na ho, direct full number ho (Jaise: 2)
+                    amount_match = re.search(r'(?:Rs\.?|INR|Rupees|\b)\s*(\d+(?:\.\d+)?)', text, re.IGNORECASE)
+
+                if amount_match:
+                    amount = float(amount_match.group(1))
+                    print(f"🎯 Matching exact amount variant from app text: ₹{amount}")
                     
-                    # Payment ko local database me save karlo
-                    received_payments[utr] = amount
-                    
-                    # System Check: Offline Auto-Verification
-                    if utr in pending_claims:
-                        claim_data = pending_claims[utr]
-                        deliver_media(claim_data["chat_id"], claim_data["token"])
-                        bot.send_message(claim_data["chat_id"], "✅ *Payment Auto-Verified!* Aapka media deliver kar diya gaya hai.", parse_mode="Markdown")
-                        bot.send_message(ADMIN_ID, f"🤖 *Auto-Verified:* UTR `{utr}` ka payment app se verify karke user ko deliver kar diya gaya.")
-                        del pending_claims[utr]
+                    # Agar amount pending_claims me match ho jata hai
+                    if amount in pending_claims:
+                        claim_data = pending_claims[amount]
+                        user_chat_id = claim_data["chat_id"]
+                        
+                        # 💥 INSTANT AUTO DELIVERY: Direct media send hoga
+                        deliver_media(user_chat_id, claim_data["token"])
+                        
+                        bot.send_message(user_chat_id, f"✅ *Payment Success!* Aapke ₹{amount} receive ho gaye hain. Media deliver kar diya gaya hai.", parse_mode="Markdown")
+                        bot.send_message(ADMIN_ID, f"🤖 *Auto-Verified:* Unique variant ₹{amount} se user `{user_chat_id}` ko delivery done.")
+                        
+                        # Database clean up
+                        if user_chat_id in active_amounts: del active_amounts[user_chat_id]
+                        del pending_claims[amount]
+                    else:
+                        print(f"⚠ System Log: ₹{amount} ke liye koi active customer wait nahi kar raha.")
             except Exception as bg_e:
                 print(f"Background Processing Error: {bg_e}")
 
-        # Thread ka use karke process ko background mein daal do
         Thread(target=process_payment, args=(notification_text,)).start()
-
     except Exception as e:
         print(f"Webhook Main Error: {e}")
         
-    # App ko hamesha 200 status code hi bhejna hai
     return jsonify({"status": "success"}), 200
 
 @app.route('/')
@@ -161,117 +189,63 @@ def generate_link(message):
     link = f"https://t.me/{BOT_USERNAME}?start=resell_{unique_token}"
     bot.reply_to(message, f"✅ *Link Generated:*\n\n`{link}`", parse_mode="Markdown")
 
-# User Checkout (/start)
+# 🟢 1. USER LINK CHECKOUT SYSTEM (Line 164 block replacement)
 @bot.message_handler(commands=['start'])
 def start_payment(message):
     try:
         args = message.text.split()
         text_args = args[1] if len(args) > 1 else ""
+        chat_id = message.chat.id
         
         if text_args.startswith("resell_"):
             token = text_args.replace("resell_", "").strip()
             if token in saved_links:
-                amount = saved_links[token]["amount"]
-                qr_img = generate_upi_qr(YOUR_UPI_ID, amount)
+                base_amount = saved_links[token]["amount"]
+                
+                # Dynamic Unique Price Variant uthana (.01 se .99 ke beech)
+                final_amount = get_unique_amount(base_amount, chat_id)
+                
+                # System me entry block karna tracking ke liye
+                pending_claims[final_amount] = {"chat_id": chat_id, "token": token, "timestamp": time.time()}
+                
+                qr_img = generate_upi_qr(YOUR_UPI_ID, final_amount)
                 
                 caption_text = (
-                    f"Pay ₹{amount} for the item\n\n📌 UPI ID — {YOUR_UPI_ID}\n\n"
-                    f"⚠️ Instructions:\n1. QR Code scan karke exact ₹{amount} pay karein.\n"
-                    f"2. Pay karke Submit UTR par click karein aur 12-digit UTR bhejein."
+                    f"✨ *SkyBox Instant Checkout:*\n\n"
+                    f"💰 Pay Exact Amount: *₹{final_amount}*\n"
+                    f"📌 UPI ID: `{YOUR_UPI_ID}`\n\n"
+                    f"⚠️ *Mandatory Instruction:*\n"
+                    f"Aapko QR scan karke exact *₹{final_amount}* hi pay karna hai (Ek bhi paisa kam ya zyada mat karna, warna automation block ho jayega).\n\n"
+                    f"🤖 *Note:* UTR submit karne ka koi jhanjhat nahi hai, payment hote hi bot 2 second me media automatic bhej dega!"
                 )
                 
-                markup = telebot.types.InlineKeyboardMarkup()
-                btn = telebot.types.InlineKeyboardButton("📥 Submit UTR", callback_data=f"sub_{amount}_{token}")
-                markup.add(btn)
-                bot.send_photo(message.chat.id, qr_img, caption=caption_text, reply_markup=markup)
+                bot.send_photo(chat_id, qr_img, caption=caption_text, parse_mode="Markdown")
             else:
-                bot.reply_to(message, "❌ Yeh link invalid hai.")
+                bot.reply_to(message, "❌ Link invalid hai.")
         else:
             bot.reply_to(message, "👋 Welcome to Skybox Bot!")
     except Exception as e:
         bot.reply_to(message, f"❌ System Error: {str(e)}")
 
-# Callback for UTR Submission Trigger
-@bot.callback_query_handler(func=lambda call: call.data.startswith("sub_"))
-def trigger_utr_input(call):
-    try:
-        data_parts = call.data.split("_", 2)
-        amount = data_parts[1]
-        token = data_parts[2]
-        msg = bot.send_message(call.message.chat.id, "✍ *Ab apna 12-digit ka UTR number yahan type karke bhejein:*", parse_mode="Markdown")
-        bot.register_next_step_handler(msg, process_utr, amount, token)
-    except Exception as e:
-        print(f"Callback Error: {e}")
-
-# Core Logic: Manual Control + App Auto Backup Verification
-def process_utr(message, amount, token):
-    try:
-        utr = message.text.strip()
-        if len(utr) != 12 or not utr.isdigit():
-            bot.reply_to(message, "❌ *Galt UTR!* 12-digit ka number sahi se bhejein.", parse_mode="Markdown")
-            return
-
-        chat_id = message.chat.id
-        
-        # 1. PEHLE CHECK KARO: Kya Android App ne ye UTR pehle hi fetch kar liya hai?
-        if utr in received_payments:
-            bot.reply_to(message, "✅ *Payment Verified via System!* Delivery shuru...", parse_mode="Markdown")
-            deliver_media(chat_id, token)
-            del received_payments[utr]
-            return
-
-        # 2. AGAR APP SE NAHI MILA: Toh isko Pending list me daalo aur Admin ko alert karo
-        pending_claims[utr] = {"chat_id": chat_id, "token": token}
-        bot.reply_to(message, "⏳ *Aapka UTR check kiya ja raha hai...* Admin ke response ya app auto-verification ka wait karein.", parse_mode="Markdown")
-
-        # Admin Verification Keyboard
-        admin_markup = telebot.types.InlineKeyboardMarkup()
-        approve_btn = telebot.types.InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app_{utr}")
-        reject_btn = telebot.types.InlineKeyboardButton("❌ Reject", callback_data=f"adm_rej_{utr}")
-        admin_markup.row(approve_btn, reject_btn)
-
-        admin_caption = f"""🔔 *Manual Alert: New Payment Claim!*
-
-👤 *User:* {message.from_user.first_name} (`{chat_id}`)
-💰 *Expected Amount:* ₹{amount}
-🧾 *Submitted UTR:* `{utr}`
-
-*Action:* Agar aap online hain toh check karke manually Approve karein, warna phone app notification aate hi ye khud verify ho jayega."""
-        
-        bot.send_message(ADMIN_ID, admin_caption, parse_mode="Markdown", reply_markup=admin_markup)
-            
-    except Exception as e:
-        bot.reply_to(message, f"❌ UTR Process Error: {str(e)}")
-
-# Admin Manual Click Actions Handler (FIXED DATA CLEAR & PARSING)
+# 🟢 2. NEW ADMIN CALLBACK FOR DYNAMIC AMOUNT (Purane sub_ aur adm_ wale blocks ki jagah)
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_"))
-def handle_admin_decision(call):
+def handle_admin_verification(call):
     try:
-        action_parts = call.data.split("_")
-        action = action_parts[1]
-        utr = action_parts[2]
-
-        if utr not in pending_claims:
-            bot.answer_callback_query(call.id, "⚠ Yeh request pehle hi process ho chuki hai (Ya expired).")
+        if call.from_user.id != ADMIN_ID: 
             return
-
-        user_chat_id = pending_claims[utr]["chat_id"]
-        user_token = pending_claims[utr]["token"]
-
-        if action == "app":
-            bot.send_message(user_chat_id, "✅ *Payment Successful!* Admin ne aapki request approve kar di hai. Media deliver ho raha hai:", parse_mode="Markdown")
-            deliver_media(user_chat_id, user_token)
-            bot.edit_message_text(f"✅ Aapne UTR `{utr}` ko manually *Approve* kar diya.", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+        action_parts = call.data.split("_")
+        amount = float(action_parts[2])
         
-        elif action == "rej":
-            bot.send_message(user_chat_id, "❌ *Payment Rejected!* Aapka UTR admin dwara decline kar diya gaya hai.", parse_mode="Markdown")
-            bot.edit_message_text(f"❌ Aapne UTR `{utr}` ko *Reject* kar diya.", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
-        
-        # Safe memory cleanup dono condition ke baad
-        del pending_claims[utr]
-
+        if amount in pending_claims:
+            claim_data = pending_claims[amount]
+            deliver_media(claim_data["chat_id"], claim_data["token"])
+            bot.send_message(claim_data["chat_id"], "✅ *Payment Approved Manually by Admin!*", parse_mode="Markdown")
+            bot.edit_message_text(f"✅ Approved ₹{amount}", call.message.chat.id, call.message.message_id)
+            if claim_data["chat_id"] in active_amounts: 
+                del active_amounts[claim_data["chat_id"]]
+            del pending_claims[amount]
     except Exception as e:
-        print(f"Admin Callback Error: {e}")
+        print(f"Admin Action Error: {e}")
 
 # Media delivery execution helper function with Smart Fallback Mechanism
 def deliver_media(chat_id, token):
