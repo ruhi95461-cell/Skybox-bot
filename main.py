@@ -79,9 +79,8 @@ def receive_notification():
         notification_text = data.get("text", "")
         print(f"📩 BharatPe Push Received: {notification_text}")
         
-        # --- LOGIC START ---
+        # --- NYA BACKUP MATCHING LOGIC ---
         import re
-        # Multi-line aur text formats se clean decimal digit (e.g. 1.83) extract karne ka master pattern
         amount_match = re.search(r'(?:received|rs\.)?\s*(\d+(?:\.\d+)?)\s*(?:rupees|\b\s*from)', notification_text, re.IGNORECASE)
         
         if not amount_match:
@@ -93,34 +92,54 @@ def receive_notification():
             print(f"🎯 100% Cleaned Target Amount String: {formatted_amount_str}")
             
             matched_key_amount = None
+            user_chat_id = None
+            user_token = None
+            
+            # Step 1: Pehle temporary memory (pending_claims) mein check karo
             for active_amt in list(pending_claims.keys()):
                 if "{:.2f}".format(active_amt) == formatted_amount_str:
                     matched_key_amount = active_amt
                     break
                     
             if matched_key_amount:
+                # Agar temporary memory mein mil gaya (Instant Match)
                 claim_data = pending_claims[matched_key_amount]
-                user_chat_id = claim_data["chat_id"]
-                user_token = claim_data["token"]
-                
-                # Direct Media Delivery Block Pipeline Trigger
-                try:
-                    deliver_media(user_chat_id, user_token)
-                except Exception as dev_err:
-                    print(f"Delivery runtime operational fault: {dev_err}")
-                    
-                # PURE USER CHAT PAR INSTANT SUCCESS MESSAGE
-                success_text = f"✅ *Payment Success!* \n\nAapke ₹{formatted_amount_str} receive ho gaye hain. Aapka order deliver kar diya gaya hai."
-                bot.send_message(user_chat_id, success_text, parse_mode="Markdown")
-                
-                # Admin Confirmation Dashboard Alert
-                bot.send_message(ADMIN_ID, f"🔥 *Auto-Verified:* Amount ₹{formatted_amount_str} se user ({user_chat_id}) ka order deliver ho gaya.")
-                
-                # System memory clean up layers
-                active_amounts.pop(user_chat_id, None)
-                pending_claims.pop(matched_key_amount, None)
+                user_chat_id = claim_data.get("chat_id")
+                user_token = claim_data.get("token")
             else:
-                print(f"⚠ System Log: ₹{formatted_amount_str} ke liye koi active pending session nahi mila.")
+                # Step 2: AGAR MEMORY RESTART SE FLUSH HO GAYI HAI (Fail-Safe Fallback)
+                # Hum decimal ko hata kar base price nikalenge (e.g., 1.83 ban jayega 1.0)
+                base_price_extracted = str(float(int(raw_amount))) 
+                
+                # Check karenge ki kya yeh token direct saved_links ke andar mapped hai
+                for token_key, media_info in saved_links.items():
+                    if str(float(media_info.get("amount", 0))) == base_price_extracted:
+                        user_token = token_key
+                        print(f"📦 Backup Match Found via Base Price: {base_price_extracted} for Token: {user_token}")
+                        break
+
+            # --- DELIVERY PIPELINE ---
+            if user_token:
+                if user_chat_id:
+                    try:
+                        deliver_media(user_chat_id, user_token)
+                        success_text = f"✅ *Payment Success!* \n\nAapke ₹{formatted_amount_str} receive ho gaye hain. Aapka order deliver kar diya gaya hai."
+                        bot.send_message(user_chat_id, success_text, parse_mode="Markdown")
+                    except Exception as dev_err:
+                        print(f"Delivery runtime fault: {dev_err}")
+                
+                # Admin ko notification hamesha jayegi chahe kuch bhi ho
+                bot.send_message(ADMIN_ID, f"🔥 *Auto-Verified:* Amount ₹{formatted_amount_str} successfully processed for Token: `{user_token}`")
+                
+                # Clean up memory safely
+                if matched_key_amount:
+                    pending_claims.pop(matched_key_amount, None)
+                    
+                # active_amounts se data clean karna
+                if user_chat_id:
+                    active_amounts.pop(user_chat_id, None)
+            else:
+                print(f"⚠ System Log: ₹{formatted_amount_str} ke liye koi permanent product mapped nahi mila.")
                 
     except Exception as e:
         print(f"Webhook Main Thread Exception Event: {e}")
