@@ -1,13 +1,14 @@
 import telebot
 import time
 import secrets
-import os  # 🟢 Render ke PORT ke liye zaroori hai
+import os
 from flask import Flask, request, jsonify
 from threading import Thread
 import io
 import qrcode
+import random
 
-# Token aur ID details
+# 🟢 CONFIGURATION BLOCK
 BOT_TOKEN = "8963839676:AAGoxcbB_izx8FH8Qg_2FyOrbcgZe1hBzr0"
 ADMIN_ID = 8393210427
 YOUR_UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
@@ -16,11 +17,11 @@ BOT_USERNAME = "SkyBoxx_bot"
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
 
-# Memory Storage for tracking payments and pending user requests
+# 🟢 GLOBAL DATA STORAGES
 active_amounts = {}  # Format: {"chat_id": {"amount": 2.02, "timestamp": 169684000}}
 pending_claims = {}  # Format: {2.02: {"chat_id": 123, "token": "xyz", "timestamp": 169684000}}
 
-# Permanent Links Storage (Line 27 Fixed Comma Error)
+# 🟢 PERMANENT MEDIA STORAGE DATA STRUCTURE (No Touch)
 saved_links = {
     "a22f0e8295ff": {
         "amount": 1.0,
@@ -32,7 +33,7 @@ saved_links = {
     },
 }
 
-# UPI QR Code Generator
+# 🟢 UPI QR CODE GENERATOR PIPELINE
 def generate_upi_qr(upi_id, amount):
     upi_url = f"upi://pay?pa={upi_id}&am={amount}&cu=INR"
     qr = qrcode.QRCode(version=1, box_size=10, border=4)
@@ -45,17 +46,15 @@ def generate_upi_qr(upi_id, amount):
     img_byte_arr.seek(0)
     return img_byte_arr
 
-import random
-
+# 🟢 UNIQUE DYNAMIC SELECTION PIPELINE (99 Slots Engine)
 def get_unique_amount(base_amount, chat_id):
     current_time = time.time()
     
-    # 10 minute se purane pending slots ko free karne ke liye
+    # Session Timeout: 10 minute purane system slots auto-release karne ke liye
     expired_amounts = [amt for amt, data in list(pending_claims.items()) if current_time - data.get("timestamp", 0) > 600]
     for amt in expired_amounts:
         c_id = pending_claims[amt]["chat_id"]
-        if c_id in active_amounts: 
-            del active_amounts[c_id]
+        if c_id in active_amounts: del active_amounts[c_id]
         del pending_claims[amt]
 
     if chat_id in active_amounts:
@@ -69,7 +68,7 @@ def get_unique_amount(base_amount, chat_id):
             
     return base_amount
 
-# 🌐 FLASK WEBHOOK: Crash-Proof Dynamic Verification Logic
+# 🌐 FLASK WEBHOOK: Strict String-Based Matching with Live Status Processing Text
 @app.route('/webhook', methods=['POST'])
 def receive_notification():
     try:
@@ -83,7 +82,7 @@ def receive_notification():
         def process_payment(text):
             try:
                 import re
-                # Notification text se strict numeric amount badalna
+                # Push notification text se decimal format extract karna (e.g. 1.51)
                 amount_match = re.search(r'(?:Rs\.?|INR|Rupees|\b)\s*(\d+(?:\.\d+)?)', text, re.IGNORECASE)
 
                 if amount_match:
@@ -102,26 +101,33 @@ def receive_notification():
                         user_chat_id = claim_data["chat_id"]
                         user_token = claim_data["token"]
                         
-                        # Direct safety backup execution to prevent missing key crash
+                        # ⏳ STEP 1: Live Status Text - Customer ko real-time feedback dena
+                        status_msg = bot.send_message(user_chat_id, "⏳ *Payment Verification Processing... Please wait.*", parse_mode="Markdown")
+                        time.sleep(1) # Chhota sa buffer status transaction clear hone ke liye
+                        
+                        # 💥 STEP 2: Core Media Delivery Execution
                         try:
                             deliver_media(user_chat_id, user_token)
                         except Exception as dev_err:
-                            print(f"Delivery fallback error: {dev_err}")
+                            print(f"Delivery runtime fallback error: {dev_err}")
                         
-                        # 🟢 PURE USER CHAT PE INSTANT SUCCESS MESSAGE
-                        success_msg = f"✅ *Payment Success!*\n\nAapke ₹{formatted_amount_str} receive ho gaye hain. Media upar deliver kar diya gaya hai."
-                        bot.send_message(user_chat_id, success_msg, parse_mode="Markdown")
+                        # ✅ STEP 3: Instant text message editing on successful extraction
+                        success_text = f"✅ *Payment Success!*\n\nAapke ₹{formatted_amount_str} receive ho gaye hain. Media upar deliver kar diya gaya hai."
+                        try:
+                            bot.edit_message_text(success_text, user_chat_id, status_msg.message_id, parse_mode="Markdown")
+                        except Exception:
+                            bot.send_message(user_chat_id, success_text, parse_mode="Markdown")
                         
-                        # Admin Confirmation Alert
-                        bot.send_message(ADMIN_ID, f"🤖 *Auto-Verified:* Amount ₹{formatted_amount_str} se user `{user_chat_id}` ko delivery completed.")
+                        # Admin Confirmation Alert Mapping
+                        bot.send_message(ADMIN_ID, f"🤖 *Auto-Verified:* Amount ₹{formatted_amount_str} se user `{user_chat_id}` ko delivery done.")
                         
-                        # 🟢 SAFE CLEANUP BLOCK: System parameters reset bina kisi data error ke
+                        # Safe database cleanup mapping parameters
                         active_amounts.pop(user_chat_id, None)
                         pending_claims.pop(matched_key_amount, None)
                     else:
-                        print(f"⚠ System Log: ₹{formatted_amount_str} ke liye active user claim nahi mila.")
+                        print(f"⚠ System Log: ₹{formatted_amount_str} ke liye active user session nahi mila.")
             except Exception as bg_e:
-                print(f"❌ Background Process Exception: {bg_e}")
+                print(f"❌ Webhook Background Processing Error: {bg_e}")
 
         Thread(target=process_payment, args=(notification_text,)).start()
     except Exception as e:
@@ -134,7 +140,7 @@ def home():
     return "Skybox Bot is Running Online on Render!"
 
 def run():
-    # 🟢 FIX FOR RENDER: Render port dynamic allocate karta hai, isliye os.environ use kiya
+    # 🟢 FIX FOR RENDER: Dynamic Port Binding Mechanism
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
@@ -142,15 +148,12 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# 🟢 UPDATED DEBUG SYSTEM: Photo/Video bhejne par instant copy-paste JSON block dega
+# 🟢 ADMIN DEBUG SYSTEM: Photo/Video bhejne par instant copy-paste JSON block dega (No Touch)
 @bot.message_handler(content_types=['photo', 'video'])
 def handle_docs(message):
     if message.from_user.id == ADMIN_ID:
         if message.content_type == 'photo':
-            # Sabse highest quality ki photo ki File ID nikalna
             file_id = message.photo[-1].file_id
-            
-            # Aapko direct copy-paste format dene ke liye response text
             reply_text = (
                 f"📸 *PHOTO FILE ID DETECTED!*\n\n"
                 f"`{file_id}`\n\n"
@@ -161,7 +164,6 @@ def handle_docs(message):
             
         elif message.content_type == 'video':
             file_id = message.video.file_id
-            
             reply_text = (
                 f"🎥 *VIDEO FILE ID DETECTED!*\n\n"
                 f"`{file_id}`\n\n"
@@ -170,7 +172,7 @@ def handle_docs(message):
             )
             bot.reply_to(message, reply_text, parse_mode="Markdown")
 
-# Link Generator Command
+# 🟢 LINK GENERATOR COMMAND FOR ADMIN
 @bot.message_handler(commands=['gen'])
 def generate_link(message):
     if message.from_user.id != ADMIN_ID:
@@ -189,17 +191,17 @@ def generate_link(message):
         
     for token, data in saved_links.items():
         if isinstance(data, dict) and data.get("amount") == amount:
-            old_link = f"https://t.me/{BOT_USERNAME}?start=resell_{token}"
+            old_link = f"https://t.me{BOT_USERNAME}?start=resell_{token}"
             bot.reply_to(message, f"⚠ ₹{amount} ka link pehle se bana hai:\n`{old_link}`", parse_mode="Markdown")
             return
             
     unique_token = secrets.token_hex(6)
     saved_links[unique_token] = {"amount": amount, "photos": [], "videos": []}
     
-    link = f"https://t.me/{BOT_USERNAME}?start=resell_{unique_token}"
+    link = f"https://t.me{BOT_USERNAME}?start=resell_{unique_token}"
     bot.reply_to(message, f"✅ *Link Generated:*\n\n`{link}`", parse_mode="Markdown")
 
-# 🟢 1. USER LINK CHECKOUT SYSTEM (Line 164 block replacement)
+# 🟢 USER LINK CHECKOUT SYSTEM (Cleaned Premium Look)
 @bot.message_handler(commands=['start'])
 def start_payment(message):
     try:
@@ -212,24 +214,29 @@ def start_payment(message):
             if token in saved_links:
                 base_amount = saved_links[token]["amount"]
                 
-                # Dynamic Unique Price Variant uthana (.01 se .99 ke beech)
+                # Dynamic Unique Price Variant allocate karna (.01 se .99 ke beech)
                 final_amount = get_unique_amount(base_amount, chat_id)
                 
-                # System me entry block karna tracking ke liye
+                # System storage me tracking params save karna
                 pending_claims[final_amount] = {"chat_id": chat_id, "token": token, "timestamp": time.time()}
                 
                 qr_img = generate_upi_qr(YOUR_UPI_ID, final_amount)
                 
+                # Cleaned Caption Text: Customer ko darane wale text aur UTR note saaf kar diye hain
                 caption_text = (
                     f"✨ *SkyBox Instant Checkout:*\n\n"
                     f"💰 Pay Exact Amount: *₹{final_amount}*\n"
                     f"📌 UPI ID: `{YOUR_UPI_ID}`\n\n"
-                    f"⚠️ *Mandatory Instruction:*\n"
-                    f"Aapko QR scan karke exact *₹{final_amount}* hi pay karna hai (Ek bhi paisa kam ya zyada mat karna, warna automation block ho jayega).\n\n"
-                    f"🤖 *Note:* UTR submit karne ka koi jhanjhat nahi hai, payment hote hi bot 2 second me media automatic bhej dega!"
+                    f"⚠️ *Important Note:*\n"
+                    f"Aapko QR scan karke exact *₹{final_amount}* hi pay karna hai (Ek bhi paisa kam ya zyada mat karna) taaki aapka payment instantly verify ho sake."
                 )
                 
-                bot.send_photo(chat_id, qr_img, caption=caption_text, parse_mode="Markdown")
+                # 🟢 BACKUP SYSTEM BUTTON: Admin manual verification ke liye button jod diya hai
+                markup = telebot.types.InlineKeyboardMarkup()
+                backup_btn = telebot.types.InlineKeyboardButton("📥 Payment Done (Verify)", callback_data=f"adm_req_{final_amount}")
+                markup.add(backup_btn)
+                
+                bot.send_photo(chat_id, qr_img, caption=caption_text, reply_markup=markup, parse_mode="Markdown")
             else:
                 bot.reply_to(message, "❌ Link invalid hai.")
         else:
@@ -237,39 +244,81 @@ def start_payment(message):
     except Exception as e:
         bot.reply_to(message, f"❌ System Error: {str(e)}")
 
-# 🟢 2. NEW ADMIN CALLBACK FOR DYNAMIC AMOUNT (Purane sub_ aur adm_ wale blocks ki jagah)
+# 🟢 ADMIN FUNCTIONAL MANUAL BACKUP CALLBACK HANDLER
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_"))
 def handle_admin_verification(call):
     try:
-        if call.from_user.id != ADMIN_ID: 
-            return
         action_parts = call.data.split("_")
-        amount = float(action_parts[2])
+        action = action_parts[1]  # 'req', 'app', ya 'rej'
         
+        # 1. User ne jab "Payment Done" par click kiya (Manual Backup Alert for Admin)
+        if action == "req":
+            amount = float(action_parts[2])
+            chat_id = call.message.chat.id
+            
+            bot.answer_callback_query(call.id, "⏳ Check kiya ja raha hai, thoda wait karein...")
+            bot.send_message(chat_id, "⏳ *Admin aapka payment check kar rahe hain, kripya 1 minute ka wait karein...*", parse_mode="Markdown")
+            
+            # Admin Verification Control Dashboard Control Buttons
+            admin_markup = telebot.types.InlineKeyboardMarkup()
+            approve_btn = telebot.types.InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app_{amount}_{chat_id}")
+            reject_btn = telebot.types.InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej_{amount}_{chat_id}")
+            admin_markup.row(approve_btn, reject_btn)
+            
+            admin_caption = (
+                f"🔔 *Manual Alert: New Backup Request!*\n\n"
+                f"👤 *User:* {call.from_user.first_name} (`{chat_id}`)\n"
+                f"💰 *Expected Amount:* ₹{amount}\n\n"
+                f"📎 *Action:* Agar app notification miss ho gaya hai toh verify karke manually Approve karein."
+            )
+            bot.send_message(ADMIN_ID, admin_caption, parse_mode="Markdown", reply_markup=admin_markup)
+            return
+
+        # Security Check: Buttons par sirf asli Admin hi click kar sakta hai
+        if call.from_user.id != ADMIN_ID:
+            bot.answer_callback_query(call.id, "❌ Aap admin nahi ho!", show_alert=True)
+            return
+
+        amount = float(action_parts[2])
+        target_user_chat_id = int(action_parts[3])
+
         if amount in pending_claims:
             claim_data = pending_claims[amount]
-            deliver_media(claim_data["chat_id"], claim_data["token"])
-            bot.send_message(claim_data["chat_id"], "✅ *Payment Approved Manually by Admin!*", parse_mode="Markdown")
-            bot.edit_message_text(f"✅ Approved ₹{amount}", call.message.chat.id, call.message.message_id)
-            if claim_data["chat_id"] in active_amounts: 
-                del active_amounts[claim_data["chat_id"]]
-            del pending_claims[amount]
-    except Exception as e:
-        print(f"Admin Action Error: {e}")
+            user_token = claim_data["token"]
 
-# Media delivery execution helper function with Smart Fallback Mechanism
+            if action == "app":
+                # Manual override media execution pipeline
+                deliver_media(target_user_chat_id, user_token)
+                bot.send_message(target_user_chat_id, f"✅ *Payment Approved Manually by Admin!*\n\nAapke ₹{amount} verify ho gaye hain. Media upar deliver kar diya gaya hai.", parse_mode="Markdown")
+                bot.edit_message_text(f"✅ *Approved ₹{amount}!* User `{target_user_chat_id}` ko media deliver kar diya gaya.", call.message.chat.id, call.message.message_id)
+                bot.answer_callback_query(call.id, "✅ Approved successfully!")
+                
+            elif action == "rej":
+                bot.send_message(target_user_chat_id, "❌ *Payment Rejected!*\n\nAdmin ne aapka verification request reject kar diya hai. Kripya sahi se pay karke support se sampark karein.", parse_mode="Markdown")
+                bot.edit_message_text(f"❌ *Rejected ₹{amount}* for user `{target_user_chat_id}`.", call.message.chat.id, call.message.message_id)
+                bot.answer_callback_query(call.id, "❌ Request declined.")
+
+            # Memory allocation cleanup
+            active_amounts.pop(target_user_chat_id, None)
+            pending_claims.pop(amount, None)
+        else:
+            bot.answer_callback_query(call.id, "⚠ Yeh request pehle hi process ho chuki hai ya expire ho gayi.", show_alert=True)
+            bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+
+    except Exception as e:
+        print(f"Admin Callback Operational Error: {e}")
+
+# 🟢 CORE MEDIA DELIVERY PIPELINE (Aapka original mechanism bina kisi touch ke)
 def deliver_media(chat_id, token):
     try:
         media_data = {}
-        # 1. Check if token maps directly to data package
         if token in saved_links:
             media_data = saved_links[token]
         else:
-            # 2. Smart Match Fallback: Agar token custom string hai, to use hardcoded asset pack pe bypass karo
             if "a22f0e8295ff" in saved_links:
                 media_data = saved_links["a22f0e8295ff"]
 
-        # Photos sending mechanism loop
+        # Photos loops execution
         for photo_id in media_data.get("photos", []):
             try:
                 bot.send_photo(chat_id, photo_id)
@@ -277,7 +326,7 @@ def deliver_media(chat_id, token):
             except Exception as e:
                 print(f"Photo delivery failed: {e}")
 
-        # Videos sending mechanism loop
+        # Videos loops execution
         for video_id in media_data.get("videos", []):
             try:
                 bot.send_video(chat_id, video_id)
@@ -288,14 +337,14 @@ def deliver_media(chat_id, token):
     except Exception as main_e:
         print(f"Global Delivery Error: {main_e}")
 
-# Main Execution Control Loop
+# 🟢 MAIN RUNNING ENGINE CONTROL LOOP (Render Stability Fixes)
 if __name__ == '__main__':
     try:
-        # Flask server ko background thread me chalana
+        # Flask continuous web server launch mapping thread
         keep_alive()
-        print("🤖 Skybox Bot is launching now on Render...")
+        print("🤖 Skybox Pro Automation Bot has been safely launched on Render...")
         
-        # Telegram bot polling start karna bina crash huye
+        # Long polling configuration to prevent timeout crashes
         bot.infinity_polling(timeout=10, long_polling_timeout=5)
     except Exception as e:
-        print(f"🔴 Main Loop Error: {e}")
+        print(f"🔴 Main Loop System Error: {e}")
