@@ -73,59 +73,55 @@ def get_unique_amount(base_amount, chat_id):
 def receive_notification():
     try:
         data = request.json
-        if not data: 
+        if not data:
             return jsonify({"status": "success"}), 200
             
         notification_text = data.get("text", "")
-        print(f"📥 BharatPe Push Received: {notification_text}")
+        print(f"📩 BharatPe Push Received: {notification_text}")
         
-        def process_payment(text):
-            try:
-                import re
-                # Multi-line aur text formats se clean decimal digit (e.g. 1.83) extract karne ka master pattern
-                amount_match = re.search(r'(?:received|rs\.?|inr|rupees|\b)\s*(\d+\.\d{2})', text, re.IGNORECASE)
+        # --- LOGIC START ---
+        import re
+        # Multi-line aur text formats se clean decimal digit (e.g. 1.83) extract karne ka master pattern
+        amount_match = re.search(r'(?:received|rs\.)?\s*(\d+(?:\.\d+)?)\s*(?:rupees|\b\s*from)', notification_text, re.IGNORECASE)
+        
+        if not amount_match:
+            amount_match = re.search(r'(?:received|rs\.?|inr|rupees|\b)\s*(\d+(?:\.\d+)?)', notification_text, re.IGNORECASE)
+            
+        if amount_match:
+            raw_amount = float(amount_match.group(1))
+            formatted_amount_str = "{:.2f}".format(raw_amount)
+            print(f"🎯 100% Cleaned Target Amount String: {formatted_amount_str}")
+            
+            matched_key_amount = None
+            for active_amt in list(pending_claims.keys()):
+                if "{:.2f}".format(active_amt) == formatted_amount_str:
+                    matched_key_amount = active_amt
+                    break
+                    
+            if matched_key_amount:
+                claim_data = pending_claims[matched_key_amount]
+                user_chat_id = claim_data["chat_id"]
+                user_token = claim_data["token"]
                 
-                if not amount_match:
-                    amount_match = re.search(r'(?:received|rs\.?|inr|rupees|\b)\s*(\d+(?:\.\d+)?)', text, re.IGNORECASE)
-
-                if amount_match:
-                    raw_amount = float(amount_match.group(1))
-                    formatted_amount_str = "{:.2f}".format(raw_amount)
-                    print(f"🎯 100% Cleaned Target Amount String: {formatted_amount_str}")
+                # Direct Media Delivery Block Pipeline Trigger
+                try:
+                    deliver_media(user_chat_id, user_token)
+                except Exception as dev_err:
+                    print(f"Delivery runtime operational fault: {dev_err}")
                     
-                    matched_key_amount = None
-                    for active_amt in list(pending_claims.keys()):
-                        if "{:.2f}".format(active_amt) == formatted_amount_str:
-                            matched_key_amount = active_amt
-                            break
-                    
-                    if matched_key_amount:
-                        claim_data = pending_claims[matched_key_amount]
-                        user_chat_id = claim_data["chat_id"]
-                        user_token = claim_data["token"]
-                        
-                        # Direct Media Delivery Block Pipeline Trigger
-                        try:
-                            deliver_media(user_chat_id, user_token)
-                        except Exception as dev_err:
-                            print(f"Delivery runtime operational fault: {dev_err}")
-                        
-                        # 🟢 PURE USER CHAT PAR INSTANT SUCCESS MESSAGE
-                        success_text = f"✅ *Payment Success!*\n\nAapke ₹{formatted_amount_str} receive ho gaye hain. Media upar deliver kar diya gaya hai."
-                        bot.send_message(user_chat_id, success_text, parse_mode="Markdown")
-                        
-                        # Admin Confirmation Dashboard Alert
-                        bot.send_message(ADMIN_ID, f"🤖 *Auto-Verified:* Amount ₹{formatted_amount_str} se user `{user_chat_id}` ko delivery completed.")
-                        
-                        # System memory clean up layers
-                        active_amounts.pop(user_chat_id, None)
-                        pending_claims.pop(matched_key_amount, None)
-                    else:
-                        print(f"⚠ System Log: ₹{formatted_amount_str} ke liye koi active pending session nahi mila.")
-            except Exception as bg_e:
-                print(f"❌ Webhook Background Processing Core Exception: {bg_e}")
-
-        Thread(target=process_payment, args=(notification_text,)).start()
+                # PURE USER CHAT PAR INSTANT SUCCESS MESSAGE
+                success_text = f"✅ *Payment Success!* \n\nAapke ₹{formatted_amount_str} receive ho gaye hain. Aapka order deliver kar diya gaya hai."
+                bot.send_message(user_chat_id, success_text, parse_mode="Markdown")
+                
+                # Admin Confirmation Dashboard Alert
+                bot.send_message(ADMIN_ID, f"🔥 *Auto-Verified:* Amount ₹{formatted_amount_str} se user ({user_chat_id}) ka order deliver ho gaya.")
+                
+                # System memory clean up layers
+                active_amounts.pop(user_chat_id, None)
+                pending_claims.pop(matched_key_amount, None)
+            else:
+                print(f"⚠ System Log: ₹{formatted_amount_str} ke liye koi active pending session nahi mila.")
+                
     except Exception as e:
         print(f"Webhook Main Thread Exception Event: {e}")
         
@@ -336,11 +332,10 @@ def deliver_media(chat_id, token):
 # 🟢 MAIN RUNNING ENGINE CONTROL LOOP (Render Stability Fixes)
 if __name__ == '__main__':
     try:
-        # Flask continuous web server launch mapping thread
+        # Keep alive thread (jo aapka chal raha hai)
         keep_alive()
         print("🤖 Skybox Pro Automation Bot has been safely launched on Render...")
         
-        # Long polling configuration to prevent timeout crashes
-        bot.infinity_polling(timeout=10, long_polling_timeout=5)
+        # YAHAN SE POLLING HATA DIYA HAI. Flask automatically run ho raha hai loop_alive se ya fir aap manual port binding kar rahe ho.
     except Exception as e:
-        print(f"🔴 Main Loop System Error: {e}")
+        print(f"❌ Main Loop System Error: {e}")
