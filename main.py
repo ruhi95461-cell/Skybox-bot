@@ -69,7 +69,7 @@ def get_unique_amount(base_amount, chat_id):
             
     return base_amount
 
-# 🌐 FLASK WEBHOOK: BharatPe App Notification Receiver (Bina UTR wala Naya Logic)
+# 🌐 FLASK WEBHOOK: Strict String-Based Matching for 100% Success Rate
 @app.route('/webhook', methods=['POST'])
 def receive_notification():
     try:
@@ -83,33 +83,42 @@ def receive_notification():
         def process_payment(text):
             try:
                 import re
-                # Notification text se strict decimal amount nikalna (Jaise: 2.02)
+                # Text se amount extract karna (Jaise: 1.51)
                 amount_match = re.search(r'(?:Rs\.?|INR|Rupees|\b)\s*(\d+\.\d{2})', text, re.IGNORECASE)
                 
                 if not amount_match:
-                    # Fallback agar text me .00 na ho, direct full number ho (Jaise: 2)
                     amount_match = re.search(r'(?:Rs\.?|INR|Rupees|\b)\s*(\d+(?:\.\d+)?)', text, re.IGNORECASE)
 
                 if amount_match:
-                    amount = float(amount_match.group(1))
-                    print(f"🎯 Matching exact amount variant from app text: ₹{amount}")
+                    # Floating point bug se bachne ke liye string formatting use karenge
+                    raw_amount = float(amount_match.group(1))
+                    formatted_amount_str = "{:.2f}".format(raw_amount)
+                    print(f"🎯 Cleaned Amount String from App: {formatted_amount_str}")
                     
-                    # Agar amount pending_claims me match ho jata hai
-                    if amount in pending_claims:
-                        claim_data = pending_claims[amount]
+                    matched_key_amount = None
+                    # pending_claims ki saari keys ko string format me match karenge
+                    for active_amt in list(pending_claims.keys()):
+                        if "{:.2f}".format(active_amt) == formatted_amount_str:
+                            matched_key_amount = active_amt
+                            break
+                    
+                    if matched_key_amount:
+                        claim_data = pending_claims[matched_key_amount]
                         user_chat_id = claim_data["chat_id"]
+                        user_token = claim_data["token"]
                         
-                        # 💥 INSTANT AUTO DELIVERY: Direct media send hoga
-                        deliver_media(user_chat_id, claim_data["token"])
+                        # 💥 INSTANT AUTO DELIVERY: Token runtime par sahi se pass hoga
+                        deliver_media(user_chat_id, user_token)
                         
-                        bot.send_message(user_chat_id, f"✅ *Payment Success!* Aapke ₹{amount} receive ho gaye hain. Media deliver kar diya gaya hai.", parse_mode="Markdown")
-                        bot.send_message(ADMIN_ID, f"🤖 *Auto-Verified:* Unique variant ₹{amount} se user `{user_chat_id}` ko delivery done.")
+                        bot.send_message(user_chat_id, f"✅ *Payment Success!* Aapke ₹{formatted_amount_str} receive ho gaye hain. Media deliver kar diya gaya hai.", parse_mode="Markdown")
+                        bot.send_message(ADMIN_ID, f"🤖 *Auto-Verified:* Amount ₹{formatted_amount_str} se user `{user_chat_id}` ko delivery done.")
                         
-                        # Database clean up
-                        if user_chat_id in active_amounts: del active_amounts[user_chat_id]
-                        del pending_claims[amount]
+                        # Cleanup active session slots
+                        if user_chat_id in active_amounts: 
+                            del active_amounts[user_chat_id]
+                        del pending_claims[matched_key_amount]
                     else:
-                        print(f"⚠ System Log: ₹{amount} ke liye koi active customer wait nahi kar raha.")
+                        print(f"⚠ System Log: ₹{formatted_amount_str} ke liye koi active pending customer nahi mila.")
             except Exception as bg_e:
                 print(f"Background Processing Error: {bg_e}")
 
