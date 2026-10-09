@@ -14,7 +14,7 @@ ADMIN_ID = 8393210427
 YOUR_UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
 BOT_USERNAME = "SkyBoxx_bot"
 
-bot = telebot.TeleBot(BOT_TOKEN)
+bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = Flask('')
 
 # 🟢 GLOBAL DATA STORAGES
@@ -219,21 +219,17 @@ def start_payment(message):
         chat_id = message.chat.id
         msg_text = message.text.strip()
         
-        # Check karenge ki kya user payment link se aaya hai (e.g., /start resell_a22f...)
+        # Check karenge ki kya user payment link se aaya hai
         if " " in msg_text:
-            token_part = msg_text.split(" ")[1]
-            if token_part.startswith("resell_"):
-                token = token_part.replace("resell_", "").strip()
+            raw_token_param = msg_text.split(" ", 1)[1].strip()
+            if raw_token_param.startswith("resell_"):
+                token = raw_token_param.replace("resell_", "").strip()
                 
                 if token in saved_links:
                     base_amount = saved_links[token]["amount"]
-                    
-                    # Dynamic Unique Price Variant
                     final_amount = get_unique_amount(base_amount, chat_id)
                     
-                    # System storage me tracking params save karna
                     pending_claims[final_amount] = {"chat_id": chat_id, "token": token, "timestamp": time.time()}
-                    
                     qr_img = generate_upi_qr(YOUR_UPI_ID, final_amount)
                     
                     caption_text = (
@@ -255,11 +251,12 @@ def start_payment(message):
                     bot.reply_to(message, "❌ Link invalid hai.")
                     return
 
-        # Agar normal /start aaya bina kisi payment token ke (e.g., direct search se)
-        bot.reply_to(message, "✨ *Welcome to Skybox Bot!* \n\nAapka swagat hai. Kisi bhi product ko buy karne ke liye official link ka use karein.", parse_mode="Markdown")
+        # Fallback normal /start message safely triggered
+        bot.reply_to(message, "✨ *Welcome to Skybox Bot!* \n\nAapka swagat hai. Kisi bhi product ko buy karne ke liye channel par diye gaye link ka use karein.", parse_mode="Markdown")
             
     except Exception as e:
-        bot.reply_to(message, f"❌ System Error: {e}")
+        print(f"Start Command Error Event: {e}")
+        bot.reply_to(message, f"❌ System Setup Processing Error: {e}")
 
 # 🟢 ADMIN FUNCTIONAL MANUAL BACKUP CALLBACK HANDLER
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_"))
