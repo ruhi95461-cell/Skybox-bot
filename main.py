@@ -249,28 +249,38 @@ def handle_admin_decision(call):
 # =====================================================================
 def deliver_media(chat_id, token):
     try:
-        media_data = {}
+        # Check ki token database mein hai ya nahi
         if token in saved_links:
             media_data = saved_links[token]
         else:
-            if "b22fe08295ff" in saved_links:
-                media_data = saved_links["b22fe08295ff"]
+            # Agar koi dynamic ya explicit fallback nahi milta, toh pehla available item uthao
+            first_key = list(saved_links.keys())[0] if saved_links else None
+            if first_key:
+                media_data = saved_links[first_key]
+            else:
+                print("❌ No media configuration found in database.")
+                return
                 
-        # Photos Loop
-        for photo_id in media_data.get("photos", []):
-            try:
-                bot.send_photo(chat_id, photo_id)
-                time.sleep(1)
-            except Exception as e:
-                print(f"Photo delivery failed: {e}")
+        # --- PHOTOS DELIVERY LOOP ---
+        # Safeguard syntax verification to prevent empty element crash
+        photos_list = media_data.get("photos", [])
+        for photo_id in photos_list:
+            if photo_id and str(photo_id).strip(): # Check empty space elements
+                try:
+                    bot.send_photo(chat_id, photo_id)
+                    time.sleep(1)
+                except Exception as e:
+                    print(f"Photo delivery failed: {e}")
                 
-        # Videos Loop
-        for video_id in media_data.get("videos", []):
-            try:
-                bot.send_video(chat_id, video_id)
-                time.sleep(1)
-            except Exception as e:
-                print(f"Video delivery failed: {e}")
+        # --- VIDEOS DELIVERY LOOP ---
+        videos_list = media_data.get("videos", [])
+        for video_id in videos_list:
+            if video_id and str(video_id).strip():
+                try:
+                    bot.send_video(chat_id, video_id)
+                    time.sleep(1)
+                except Exception as e:
+                    print(f"Video delivery failed: {e}")
                 
     except Exception as e:
         print(f"Global Delivery Error: {e}")
