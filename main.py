@@ -81,7 +81,7 @@ def get_file_id_handler(message):
             file_id = message.video.file_id
             bot.reply_to(message, f"🎥 *Video File ID Detected:*\n\n`{file_id}`\n\nIse aap code ke upar `saved_links` mein manually paste kar sakte hain.", parse_mode="Markdown")
 
-# --- TEMPORARY LINK GENERATOR COMMAND (/gen <amount>) ---
+# --- TEMPORARY LINK GENERATOR & STRUCTURE ENGINE (/gen <amount>) ---
 @bot.message_handler(commands=['gen'])
 def generate_link(message):
     if message.from_user.id != ADMIN_ID:
@@ -89,7 +89,7 @@ def generate_link(message):
         
     args = message.text.split()
     if len(args) < 2:
-        bot.reply_to(message, "❌ *Sahi format use karein:* `/gen <amount>`", parse_mode="Markdown")
+        bot.reply_to(message, "❌ *Sahi format use karein:* `/gen <amount>`\n*Example:* `/gen 5`", parse_mode="Markdown")
         return
         
     try:
@@ -98,10 +98,36 @@ def generate_link(message):
         bot.reply_to(message, "❌ *Invalid amount!*", parse_mode="Markdown")
         return
         
+    # Unique 12-character token generate karna
     unique_token = secrets.token_hex(6)
     
-    # Upar wale permanent token se media safe-copy karne ka logic (Crash proof)
-    base_token = "b22fe08295ff"
+    # User ke liye standard link format
+    user_link = f"https://t.me{BOT_USERNAME}?start={unique_token}"
+    
+    # 🎯 PERMANENT GITHUB STRUCTURE FORMAT TEXT
+    # Yeh text bot aapko chat mein bhejega taaki aap copy-paste kar sakein
+    structure_text = (
+        f"🎯 *New Link Generated Successfully!*\n"
+        f"🔗 *User Link:* `{user_link}`\n\n"
+        f"⚙️ *GitHub Permanent Database Structure:*\n"
+        f"Below code ko copy karein aur GitHub par `saved_links` ke andar purane product ke bracket ke baad comma `,` lagakar paste kar dein:\n\n"
+        f"```python\n"
+        f"    \"{unique_token}\": {{\n"
+        f"        \"amount\": {amount},\n"
+        f"        \"photos\": [\n"
+        f"            \"YAHAN_FIRST_PHOTO_FILE_ID\",\n"
+        f"            \"YAHAN_SECOND_PHOTO_FILE_ID\"\n"
+        f"        ],\n"
+        f"        \"videos\": [\n"
+        f"            \"YAHAN_VIDEO_FILE_ID\"\n"
+        f"        ]\n"
+        f"    }}\n"
+        f"```\n\n"
+        f"💡 *Tip:* Agar sirf 1 photo ho toh second photo line delete kar dena aur comma hata dena. Video nahi ho toh array khali chhod dena."
+    )
+    
+    # In-memory backup activation (Render restart hone tak ke liye temporary backup safe copy)
+    base_token = "499d7f1d0638"
     default_photos = saved_links[base_token]["photos"] if base_token in saved_links else []
     default_videos = saved_links[base_token]["videos"] if base_token in saved_links else []
     
@@ -111,8 +137,7 @@ def generate_link(message):
         "videos": default_videos
     }
     
-    link = f"https://t.me/{BOT_USERNAME}?start={unique_token}"
-    bot.reply_to(message, f"🎯 *New Temporary Link Generated for ₹{amount}:*\n`{link}`\n\n⚠️ *Note:* Yeh link Render restart hone tak hi active rahega.", parse_mode="Markdown")
+    bot.reply_to(message, structure_text, parse_mode="Markdown")
 
 # =====================================================================
 # 📦 STEP 5: USER CHECKOUT & FLOW PIPELINE
@@ -249,38 +274,28 @@ def handle_admin_decision(call):
 # =====================================================================
 def deliver_media(chat_id, token):
     try:
-        # Check ki token database mein hai ya nahi
+        media_data = {}
         if token in saved_links:
             media_data = saved_links[token]
         else:
-            # Agar koi dynamic ya explicit fallback nahi milta, toh pehla available item uthao
-            first_key = list(saved_links.keys())[0] if saved_links else None
-            if first_key:
-                media_data = saved_links[first_key]
-            else:
-                print("❌ No media configuration found in database.")
-                return
+            if "499d7f1d0638" in saved_links:
+                media_data = saved_links["499d7f1d0638"]
                 
-        # --- PHOTOS DELIVERY LOOP ---
-        # Safeguard syntax verification to prevent empty element crash
-        photos_list = media_data.get("photos", [])
-        for photo_id in photos_list:
-            if photo_id and str(photo_id).strip(): # Check empty space elements
-                try:
-                    bot.send_photo(chat_id, photo_id)
-                    time.sleep(1)
-                except Exception as e:
-                    print(f"Photo delivery failed: {e}")
+        # Photos Loop
+        for photo_id in media_data.get("photos", []):
+            try:
+                bot.send_photo(chat_id, photo_id)
+                time.sleep(1)
+            except Exception as e:
+                print(f"Photo delivery failed: {e}")
                 
-        # --- VIDEOS DELIVERY LOOP ---
-        videos_list = media_data.get("videos", [])
-        for video_id in videos_list:
-            if video_id and str(video_id).strip():
-                try:
-                    bot.send_video(chat_id, video_id)
-                    time.sleep(1)
-                except Exception as e:
-                    print(f"Video delivery failed: {e}")
+        # Videos Loop
+        for video_id in media_data.get("videos", []):
+            try:
+                bot.send_video(chat_id, video_id)
+                time.sleep(1)
+            except Exception as e:
+                print(f"Video delivery failed: {e}")
                 
     except Exception as e:
         print(f"Global Delivery Error: {e}")
