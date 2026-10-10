@@ -38,7 +38,6 @@ saved_links = {
         ]
     }
 },
-
     "8bd622bab1a6": {
         "amount": 2.0,
         "photos": [
