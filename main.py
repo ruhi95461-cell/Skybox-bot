@@ -1,3 +1,83 @@
+import telebot
+import time
+import secrets
+import os
+import qrcode
+import io
+from flask import Flask
+from threading import Thread
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+# =====================================================================
+# 📦 STEP 1: CONFIGURATION & CONFIG BLOCK
+# =====================================================================
+# 🚨 SECURITY: Apne token ko secure rakhne ke liye yahan naya token dalein
+BOT_TOKEN = "8963839676:AAHGTnd6QcysW9DrCUMQrnW8xRf52J-wBe8" 
+ADMIN_ID = 8393210427
+UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
+BOT_USERNAME = "SkyBox_bot"
+
+bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
+app = Flask('')
+
+# =====================================================================
+# 📦 STEP 2: REGISTER CACHES & PERMANENT DATABASE
+# =====================================================================
+processed_utrs = set()  # Active UTR cache memory to prevent spam
+
+# 💡 LIFETIME PERMANENT DATABASE: Apne saare permanent links/products yahan niche add karein
+saved_links = {
+    "b22fe08295ff": {
+        "amount": 2.55,
+        "photos": [
+            "AgACAgUAAxkBAAI1BmYr-hLBr5gQ2EEabT2H7yHA34AAJqUxGzAtVlMkBvgt1WcJneb8qw4ADAMBAAM0aQAD400FAAIs"
+        ],
+        "videos": []
+    }
+}
+
+# =====================================================================
+# 📦 STEP 3: HELPER FUNCTIONS & WEB SERVER FOR RENDER
+# =====================================================================
+def generate_upi_qr(upi_id, amount):
+    upi_url = f"upi://pay?pa={upi_id}&am={amount}&cu=INR"
+    qr = qrcode.QRCode(version=1, box_size=10, border=4)
+    qr.add_data(upi_url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    img_byte_arr = io.BytesIO()
+    img.save(img_byte_arr, format='PNG')
+    img_byte_arr.seek(0)
+    return img_byte_arr
+
+@app.route('/')
+def home():
+    return "Skybox Bot is Running Online on Render!"
+
+def run():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# =====================================================================
+# 📦 STEP 4: TELEGRAM ADMIN COMMANDS & HANDLERS
+# =====================================================================
+
+# --- FILE ID EXTRACTOR FOR ADMIN (Photos/Videos Engine) ---
+@bot.message_handler(content_types=['photo', 'video'])
+def get_file_id_handler(message):
+    if message.from_user.id == ADMIN_ID:
+        if message.content_type == 'photo':
+            file_id = message.photo[-1].file_id
+            bot.reply_to(message, f"📸 *Photo File ID Detected:*\n\n`{file_id}`\n\nIse aap code ke upar `saved_links` mein manually paste kar sakte hain.", parse_mode="Markdown")
+        elif message.content_type == 'video':
+            file_id = message.video.file_id
+            bot.reply_to(message, f"🎥 *Video File ID Detected:*\n\n`{file_id}`\n\nIse aap code ke upar `saved_links` mein manually paste kar sakte hain.", parse_mode="Markdown")
+
 # --- TEMPORARY LINK GENERATOR COMMAND (/gen <amount>) ---
 @bot.message_handler(commands=['gen'])
 def generate_link(message):
@@ -30,6 +110,10 @@ def generate_link(message):
     
     link = f"https://t.me{BOT_USERNAME}?start={unique_token}"
     bot.reply_to(message, f"🎯 *New Temporary Link Generated for ₹{amount}:*\n`{link}`\n\n⚠️ *Note:* Yeh link Render restart hone tak hi active rahega.", parse_mode="Markdown")
+
+# =====================================================================
+# 📦 STEP 5: USER CHECKOUT & FLOW PIPELINE
+# =====================================================================
 
 # --- USER CHECKOUT SYSTEM ---
 @bot.message_handler(commands=['start'])
@@ -95,7 +179,7 @@ def forward_utr_to_admin(message, token, amount):
         bot.send_message(chat_id, "⚠️ *Aapka yeh payment verification pehle se processing mein hai. Kripya wait karein aur baar-baar spam na karein!*", parse_mode="Markdown")
         return
 
-    # UTR ko Registry cache mein lock karna
+    # UTR Registry Lock
     processed_utrs.add(utr_text)
     
     bot.send_message(chat_id, "⌛ *Aapka payment check ho raha hai. Please kripya 1 minute tak wait karein...*", parse_mode="Markdown")
@@ -117,7 +201,9 @@ def forward_utr_to_admin(message, token, amount):
     
     bot.send_message(ADMIN_ID, admin_alert_text, parse_mode="Markdown", reply_markup=admin_markup)
 
-# --- ADMIN DECISION CALLBACK HANDLER ---
+# =====================================================================
+# 📦 STEP 6: ADMIN CORE DECISION CALLBACK HANDLER
+# =====================================================================
 @bot.callback_query_handler(func=lambda call: call.data.startswith('adm_'))
 def handle_admin_decision(call):
     try:
@@ -149,13 +235,15 @@ def handle_admin_decision(call):
             
             bot.send_message(target_user_id, "❌ Sorry! Admin ne aapka payment status reject kar diya hai. Kripya correct UTR verify karke dobara bhejein.")
             
-            # Anti-spam release taaki user sahi details se retry kar sake
+            # Anti-spam release
             processed_utrs.discard(utr_key)
             
     except Exception as e:
         print(f"Callback Error: {e}")
 
-# --- CORE MEDIA DELIVERY PIPELINE ---
+# =====================================================================
+# 📦 STEP 7: MEDIA DELIVERY ENGINE & MAIN ENGINE INTERACTION
+# =====================================================================
 def deliver_media(chat_id, token):
     try:
         media_data = {}
@@ -165,7 +253,7 @@ def deliver_media(chat_id, token):
             if "b22fe08295ff" in saved_links:
                 media_data = saved_links["b22fe08295ff"]
                 
-        # Photos Loop Execution
+        # Photos Loop
         for photo_id in media_data.get("photos", []):
             try:
                 bot.send_photo(chat_id, photo_id)
@@ -173,7 +261,7 @@ def deliver_media(chat_id, token):
             except Exception as e:
                 print(f"Photo delivery failed: {e}")
                 
-        # Videos Loop Execution
+        # Videos Loop
         for video_id in media_data.get("videos", []):
             try:
                 bot.send_video(chat_id, video_id)
@@ -184,7 +272,7 @@ def deliver_media(chat_id, token):
     except Exception as e:
         print(f"Global Delivery Error: {e}")
 
-# --- MAIN ENGINE CONTROL ---
+# --- MAIN LOOP RUNNER CONTROL ---
 if __name__ == "__main__":
     try:
         keep_alive()
