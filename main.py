@@ -39,6 +39,17 @@ saved_links = {
     }
 }
 
+    "8bd622bab1a6": {
+        "amount": 2.0,
+        "photos": [
+            "AgACAgUAAxkBAAIFo2rKeWPuow-5ayfkefMOPAnJfa4NAAIWFGsbjdVRVkZx6iW15qH8AQADAgADeQADPQQ",
+            "YAHAN_SECOND_PHOTO_FILE_ID"
+        ],
+        "videos": [
+            "BAACAgUAAxkBAAIFpWrKeWjRrkERDZcPe6Cq38uSfYyXAAJeIQACjdVRVmF7l4XhaIeSPQQ"
+        ]
+    }
+
 # =====================================================================
 # 📦 STEP 3: HELPER FUNCTIONS & WEB SERVER FOR RENDER
 # =====================================================================
