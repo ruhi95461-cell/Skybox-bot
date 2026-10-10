@@ -111,7 +111,7 @@ def generate_link(message):
         "videos": default_videos
     }
     
-    link = f"https://t.me{BOT_USERNAME}?start={unique_token}"
+    link = f"https://t.me/{BOT_USERNAME}?start={unique_token}"
     bot.reply_to(message, f"🎯 *New Temporary Link Generated for ₹{amount}:*\n`{link}`\n\n⚠️ *Note:* Yeh link Render restart hone tak hi active rahega.", parse_mode="Markdown")
 
 # =====================================================================
