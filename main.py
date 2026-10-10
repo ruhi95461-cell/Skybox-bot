@@ -37,7 +37,7 @@ saved_links = {
             "BAACAgUAAxkBAAIFdWrKXj6JrQ2eMVyDKXFQPLNC8g4FAAI6IQACjdVRVgX9YrqjKeJIPQQ"
         ]
     }
-}
+},
 
     "8bd622bab1a6": {
         "amount": 2.0,
