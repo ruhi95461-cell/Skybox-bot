@@ -15,7 +15,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 BOT_TOKEN = "8963839676:AAHGTnd6QcysW9DrCUMQrnW8xRf52J-wBe8" 
 ADMIN_ID = 8393210427
 UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
-BOT_USERNAME = "SkyBox_bot"
+BOT_USERNAME = "SkyBoxx_bot"
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = Flask('')
