@@ -27,7 +27,7 @@ processed_utrs = set()  # Active UTR cache memory to prevent spam
 
 # 💡 LIFETIME PERMANENT DATABASE: Apne saare permanent links/products yahan niche add karein
 saved_links = {
-    "1233afeb48a0": {
+    "499d7f1d0638": {
         "amount": 1.00,
         "photos": [
             "AgACAgUAAxkBAAIFcWrKXiNhwiP3gTNbHj7oyr2d0KnjAALhE2sbjdVRVtfSc0J0EVRKAQADAgADeQADPQQ"
