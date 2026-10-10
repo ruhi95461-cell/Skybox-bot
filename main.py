@@ -102,7 +102,7 @@ def generate_link(message):
     unique_token = secrets.token_hex(6)
     
     # User ke liye standard link format
-    user_link = f"https://t.me{BOT_USERNAME}?start={unique_token}"
+    user_link = f"https://t.me/{BOT_USERNAME}?start={unique_token}"
     
     # 🎯 PERMANENT GITHUB STRUCTURE FORMAT TEXT
     # Yeh text bot aapko chat mein bhejega taaki aap copy-paste kar sakein
