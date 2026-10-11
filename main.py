@@ -50,15 +50,15 @@ saved_links = {
     "a3a1d01468ba": {
         "amount": 65.00,
         "photos": [
+            ""
             "AgACAgUAAxkBAAIGVWrMDbh7wQTPvcPCUtWKnlbEW54vAAKuFWsbc8ZgVqoOv0RJKy7SAQADAgADeAADPQQ"
-            "AgACAgUAAxkBAAIGImrL_i8RmFMr734eu4BppPKGSGqIAAKoFWsbc8ZgVsVtnxXY4hBIAQADAgADeAADPQQ"
         ],
         "videos": [
             "BAACAgUAAxkBAAIGVGrMDbj9d5-AyK2cik7n8YvL8ZrjAAJiOwACc8ZgVpyKTvA00lM9PQQ"
             "BAACAgUAAxkBAAIGUmrMDRG8iy6-E00KZcsrLel-IK2LAAJhOwACc8ZgVku_AzvTMVsbPQQ"
-            "BAACAgUAAxkBAAIGUGrMDPzHAAHfbk8VEUiKfCE7fjQQXQAC0CAAAmeuYVZ23fD2eEstJD0E"
-            "BAACAgUAAxkBAAIGRmrMC2IyugKG4nEoHZfiOT-DN0RNAAJeOwACc8ZgVlW0l_i7y0hePQQ"
-            "BAACAgUAAxkBAAIGSmrMC7o8C0b1VInTpVXxQ428XkN3AAJgOwACc8ZgVmwzgmQdk9K4PQQ"
+            ""
+            ""
+            ""
         ]
     }
 }
