@@ -11,7 +11,6 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 # =====================================================================
 # 📦 STEP 1: CONFIGURATION & CONFIG BLOCK
 # =====================================================================
-# 🚨 SECURITY: Apne token ko secure rakhne ke liye yahan naya token dalein
 BOT_TOKEN = "8963839676:AAHGTnd6QcysW9DrCUMQrnW8xRf52J-wBe8" 
 ADMIN_ID = 8393210427
 UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
@@ -25,7 +24,7 @@ app = Flask('')
 # =====================================================================
 processed_utrs = set()  # Active UTR cache memory to prevent spam
 
-# 💡 LIFETIME PERMANENT DATABASE: Apne saare permanent links/products yahan niche add karein
+# 💡 LIFETIME PERMANENT DATABASE: Naye products yahan niche add karte rahein
 saved_links = {
     "499d7f1d0638": {
         "amount": 1.00,
@@ -41,8 +40,7 @@ saved_links = {
     "8bd622bab1a6": {
         "amount": 2.00,
         "photos": [
-            "AgACAgUAAxkBAAIFo2rKeWPuow-5ayfkefMOPAnJfa4NAAINFGsbidVRVkZx61W15qH8AQADAgADeQADPQQ",
-            "YAHAN_SECOND_PHOTO_FILE_ID"
+            "AgACAgUAAxkBAAIFo2rKeWPuow-5ayfkefMOPAnJfa4NAAINFGsbidVRVkZx61W15qH8AQADAgADeQADPQQ"
         ],
         "videos": [
             "BAACAgUAAxkBAAIFpWrKeWjRrKErDZcPe6Cq38u5fyyXAAJeIQACjdVRVmF714XhaIeSPQQ"
@@ -81,7 +79,6 @@ def keep_alive():
 # 📦 STEP 4: TELEGRAM ADMIN COMMANDS & HANDLERS
 # =====================================================================
 
-# --- FILE ID EXTRACTOR FOR ADMIN (Photos/Videos Engine) ---
 @bot.message_handler(content_types=['photo', 'video'])
 def get_file_id_handler(message):
     if message.from_user.id == ADMIN_ID:
@@ -92,7 +89,7 @@ def get_file_id_handler(message):
             file_id = message.video.file_id
             bot.reply_to(message, f"🎥 *Video File ID Detected:*\n\n`{file_id}`\n\nIse aap code ke upar `saved_links` mein manually paste kar sakte hain.", parse_mode="Markdown")
 
-# --- TEMPORARY LINK GENERATOR & STRUCTURE ENGINE (/gen <amount>) ---
+# --- FIXED: DUPLICATE AMOUNT CHECK ENGINE ---
 @bot.message_handler(commands=['gen'])
 def generate_link(message):
     if message.from_user.id != ADMIN_ID:
@@ -109,14 +106,15 @@ def generate_link(message):
         bot.reply_to(message, "❌ *Invalid amount!*", parse_mode="Markdown")
         return
         
-    # Unique 12-character token generate karna
+    # 🎯 CHECK: Agar yeh amount pehle se database mein hai toh block karein
+    for existing_token, data in saved_links.items():
+        if data.get("amount") == amount:
+            bot.reply_to(message, f"⚠️ *Link Already Exists!*\n\n₹{amount} ka link pehle se bana hua hai.\nToken: `{existing_token}`\n\nAap ek amount ka ek hi active link bana sakte hain.", parse_mode="Markdown")
+            return
+        
     unique_token = secrets.token_hex(6)
-    
-    # User ke liye standard link format
     user_link = f"https://t.me/{BOT_USERNAME}?start={unique_token}"
     
-    # 🎯 PERMANENT GITHUB STRUCTURE FORMAT TEXT
-    # Yeh text bot aapko chat mein bhejega taaki aap copy-paste kar sakein
     structure_text = (
         f"🎯 *New Link Generated Successfully!*\n"
         f"🔗 *User Link:* `{user_link}`\n\n"
@@ -126,18 +124,17 @@ def generate_link(message):
         f"    \"{unique_token}\": {{\n"
         f"        \"amount\": {amount},\n"
         f"        \"photos\": [\n"
-        f"            \"YAHAN_FIRST_PHOTO_FILE_ID\",\n"
-        f"            \"YAHAN_SECOND_PHOTO_FILE_ID\"\n"
+        f"            \"YAHAN_FIRST_PHOTO_FILE_ID\"\n"
         f"        ],\n"
         f"        \"videos\": [\n"
         f"            \"YAHAN_VIDEO_FILE_ID\"\n"
         f"        ]\n"
         f"    }}\n"
         f"```\n\n"
-        f"💡 *Tip:* Agar sirf 1 photo ho toh second photo line delete kar dena aur comma hata dena. Video nahi ho toh array khali chhod dena."
+        f"💡 *Tip:* File ID GitHub par update karna mat bhoolna!"
     )
     
-    # In-memory backup activation (Render restart hone tak ke liye temporary backup safe copy)
+    # Temporary simulation copy
     base_token = "499d7f1d0638"
     default_photos = saved_links[base_token]["photos"] if base_token in saved_links else []
     default_videos = saved_links[base_token]["videos"] if base_token in saved_links else []
@@ -154,7 +151,6 @@ def generate_link(message):
 # 📦 STEP 5: USER CHECKOUT & FLOW PIPELINE
 # =====================================================================
 
-# --- USER CHECKOUT SYSTEM ---
 @bot.message_handler(commands=['start'])
 def start_payment(message):
     try:
@@ -191,7 +187,6 @@ def start_payment(message):
     except Exception as e:
         print(f"Start Error: {e}")
 
-# --- CALLBACK: TRIGGER UTR PROMPT ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('sub_utr:'))
 def ask_for_utr(call):
     chat_id = call.message.chat.id
@@ -203,7 +198,6 @@ def ask_for_utr(call):
     msg = bot.send_message(chat_id, "⌨️ Kripya apna **12 digit ka UTR Number** ya transaction detail reply text mein likh kar bheinjein:")
     bot.register_next_step_handler(msg, forward_utr_to_admin, token, amount)
 
-# --- PROCESS, ANTI-SPAM VERIFY AND FORWARD UTR TO ADMIN ---
 def forward_utr_to_admin(message, token, amount):
     chat_id = message.chat.id
     user_name = message.from_user.first_name or "User"
@@ -213,17 +207,13 @@ def forward_utr_to_admin(message, token, amount):
         bot.reply_to(message, "❌ Kripya sirf Text mein UTR likh kar bheinjein. Link par fir se click karke retry karein.")
         return
 
-    # Anti-Spam Check Module
     if utr_text in processed_utrs:
-        bot.send_message(chat_id, "⚠️ *Aapka yeh payment verification pehle se processing mein hai. Kripya wait karein aur baar-baar spam na karein!*", parse_mode="Markdown")
+        bot.send_message(chat_id, "⚠️ *Aapka yeh payment verification pehle se processing mein hai!*", parse_mode="Markdown")
         return
 
-    # UTR Registry Lock
     processed_utrs.add(utr_text)
-    
     bot.send_message(chat_id, "⌛ *Aapka payment check ho raha hai. Please kripya 1 minute tak wait karein...*", parse_mode="Markdown")
     
-    # Admin Panel UI Layout
     admin_markup = InlineKeyboardMarkup()
     approve_btn = InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app:{chat_id}:{token}:{utr_text}")
     reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:{utr_text}")
@@ -241,7 +231,7 @@ def forward_utr_to_admin(message, token, amount):
     bot.send_message(ADMIN_ID, admin_alert_text, parse_mode="Markdown", reply_markup=admin_markup)
 
 # =====================================================================
-# 📦 STEP 6: ADMIN CORE DECISION CALLBACK HANDLER
+# 📦 STEP 6: ADMIN CORE DECISION CALLBACK HANDLER & DELIVERY
 # =====================================================================
 @bot.callback_query_handler(func=lambda call: call.data.startswith('adm_'))
 def handle_admin_decision(call):
@@ -274,14 +264,14 @@ def handle_admin_decision(call):
             
             bot.send_message(target_user_id, "❌ Sorry! Admin ne aapka payment status reject kar diya hai. Kripya correct UTR verify karke dobara bhejein.")
             
-            # Anti-spam release
+            # Anti-spam cache se release karein taaki user sahi UTR dobara bhej sake
             processed_utrs.discard(utr_key)
             
     except Exception as e:
         print(f"Callback Error: {e}")
 
 # =====================================================================
-# 📦 STEP 7: MEDIA DELIVERY ENGINE & MAIN ENGINE INTERACTION
+# 📦 STEP 7: FIXED MEDIA DELIVERY ENGINE
 # =====================================================================
 def deliver_media(chat_id, token):
     try:
@@ -294,6 +284,8 @@ def deliver_media(chat_id, token):
                 
         # Photos Loop
         for photo_id in media_data.get("photos", []):
+            if "YAHAN_" in str(photo_id):  # Placeholder / dummy string ko skip karega
+                continue
             try:
                 bot.send_photo(chat_id, photo_id)
                 time.sleep(1)
@@ -302,6 +294,8 @@ def deliver_media(chat_id, token):
                 
         # Videos Loop
         for video_id in media_data.get("videos", []):
+            if "YAHAN_" in str(video_id):  # Placeholder / dummy string ko skip karega
+                continue
             try:
                 bot.send_video(chat_id, video_id)
                 time.sleep(1)
@@ -311,11 +305,16 @@ def deliver_media(chat_id, token):
     except Exception as e:
         print(f"Global Delivery Error: {e}")
 
-# --- MAIN LOOP RUNNER CONTROL ---
+# =====================================================================
+# 🚀 STEP 8: MAIN LOOP RUNNER CONTROL
+# =====================================================================
 if __name__ == "__main__":
     try:
+        # Flask server ko alag thread mein start karein Render ping ke liye
         keep_alive()
         print("🚀 SkyBox Manual Pro Bot has been successfully updated on Render...")
+        
+        # Continuous long polling runner restart mechanism ke saath
         bot.infinity_polling(timeout=10, long_polling_timeout=5)
     except Exception as e:
         print(f"Loop Crash Restarter: {e}")
