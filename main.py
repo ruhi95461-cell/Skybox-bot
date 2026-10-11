@@ -243,6 +243,7 @@ def forward_utr_to_admin(message, token, amount):
 @bot.callback_query_handler(func=lambda call: call.data.startswith('adm_'))
 def handle_admin_decision(call):
     try:
+        # Check authorization
         if call.from_user.id != ADMIN_ID:
             bot.answer_callback_query(call.id, "❌ Not Authorized!", show_alert=True)
             return
@@ -263,6 +264,7 @@ def handle_admin_decision(call):
             
         elif action == "adm_rej":
             target_user_id = int(action_parts[1])
+            utr_key = action_parts[2]
             
             bot.answer_callback_query(call.id, "❌ Claim Rejected!")
             bot.edit_message_text(chat_id=ADMIN_ID, message_id=call.message.message_id, 
@@ -270,64 +272,59 @@ def handle_admin_decision(call):
             
             bot.send_message(target_user_id, "❌ Sorry! Admin ne aapka payment status reject kar diya hai. Kripya correct UTR verify karke dobara bhejein.")
             
+            # Release UTR from anti-spam cache
+            processed_utrs.discard(utr_key)
+            
     except Exception as e:
         print(f"Callback Error: {e}")
 
 # =====================================================================
-# 📦 STEP 7: FIXED MEDIA DELIVERY ENGINE
+# 📦 STEP 7: DIRECT MEDIA DELIVERY ENGINE (PHOTOS & VIDEOS)
 # =====================================================================
 def deliver_media(chat_id, token):
     try:
         media_data = {}
         
-        # Exact token match verify karein
+        # Verify if token exists in database
         if token in saved_links:
             media_data = saved_links[token]
         else:
-            # Fallback agar token dynamic strings mein thoda space le raha ho
-            for k, v in saved_links.items():
-                if str(k).strip() == str(token).strip():
-                    media_data = v
-                    break
-        
-        # Agar naye token mein data nahi mila toh base token ka media safety ke liye bheinjein
-        if not media_data or (not media_data.get("photos") and not media_data.get("videos")):
+            # Fallback configuration
             if "499d7f1d0638" in saved_links:
                 media_data = saved_links["499d7f1d0638"]
 
-        # 📸 Photos Delivery Loop
-        for photo_id in media_data.get("photos", []):
-            if "YAHAN_" in str(photo_id) or not photo_id:
-                continue
-            try:
-                bot.send_photo(chat_id, str(photo_id).strip())
-                time.sleep(1)
-            except Exception as e:
-                print(f"Photo delivery failed: {e}")
-                
-        # 🎥 Videos Delivery Loop
-        for video_id in media_data.get("videos", []):
-            if "YAHAN_" in str(video_id) or not video_id:
-                continue
-            try:
-                bot.send_video(chat_id, str(video_id).strip())
-                time.sleep(1)
-            except Exception as e:
-                print(f"Video delivery failed: {e}")
-                
+        # 📸 Photos Loop Execution
+        if "photos" in media_data:
+            for photo_id in media_data["photos"]:
+                if "YAHAN_" in str(photo_id) or not photo_id:
+                    continue
+                try:
+                    bot.send_photo(chat_id, str(photo_id).strip())
+                    time.sleep(1) # Spamtrap bypass delay
+                except Exception as e:
+                    print(f"Photo delivery failed: {e}")
+                    
+        # 🎥 Videos Loop Execution
+        if "videos" in media_data:
+            for video_id in media_data["videos"]:
+                if "YAHAN_" in str(video_id) or not video_id:
+                    continue
+                try:
+                    bot.send_video(chat_id, str(video_id).strip())
+                    time.sleep(1) # Spamtrap bypass delay
+                except Exception as e:
+                    print(f"Video delivery failed: {e}")
+                    
     except Exception as e:
-        print(f"Global Delivery Error: {e}")
+        print(f"Global Delivery Engine Error: {e}")
 
 # =====================================================================
 # 🚀 STEP 8: MAIN LOOP RUNNER CONTROL
 # =====================================================================
 if __name__ == "__main__":
     try:
-        # Flask server ko alag thread mein start karein Render ping ke liye
         keep_alive()
         print("🚀 SkyBox Manual Pro Bot has been successfully updated on Render...")
-        
-        # Continuous long polling runner restart mechanism ke saath
         bot.infinity_polling(timeout=10, long_polling_timeout=5)
     except Exception as e:
         print(f"Loop Crash Restarter: {e}")
