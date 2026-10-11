@@ -22,7 +22,7 @@ app = Flask('')
 # =====================================================================
 # 📦 STEP 2: REGISTER CACHES & PERMANENT DATABASE
 # =====================================================================
-processed_utrs = set()  # Active UTR cache memory to prevent spam
+processed_utrs = set()  
 
 # 💡 LIFETIME PERMANENT DATABASE: Naye products yahan niche add karte rahein
 saved_links = {
@@ -37,7 +37,7 @@ saved_links = {
         ]
     }, 
 
-    "8bd622bab1a6":
+    "8bd622bab1a6": { 
         "amount": 2.00,
         "photos": [
             "AgACAgUAAxkBAAIF1GrL5aDZ07m2hwGmNoacAsjUaKaJAAJxEgsbjdVRV1nFKFiT1rG1AQADAgADeQADPQQ"
@@ -46,6 +46,7 @@ saved_links = {
             "BAACAgUAAxkBAAIF02rL5aDw6ZGNFv-xZppIJupdJtBeAAKOIAACjdVRVjFdzqDuT1MqPQQ"
         ]
     }
+}
 
 # =====================================================================
 # 📦 STEP 3: HELPER FUNCTIONS & WEB SERVER FOR RENDER
