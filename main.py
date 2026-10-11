@@ -111,7 +111,7 @@ def generate_link(message):
             return
         
     unique_token = secrets.token_hex(6)
-    user_link = f"https://t.me{BOT_USERNAME}?start={unique_token}"
+    user_link = f"https://t.me/{BOT_USERNAME}?start={unique_token}"
     
     structure_text = (
         f"👑 *Gateway Link Generated Successfully!*\n\n"
