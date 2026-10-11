@@ -50,7 +50,7 @@ saved_links = {
     "a3a1d01468ba": {
         "amount": 65.00,
         "photos": [
-            ""
+            "AgACAgUAAxkBAAIGm2rMGeGGhPKakJkH3l4aPPO9FWnCAAJ-EGsbc8ZoViZGbRQfL5tWAQADAgADeAADPQQ"
             "AgACAgUAAxkBAAIGVWrMDbh7wQTPvcPCUtWKnlbEW54vAAKuFWsbc8ZgVqoOv0RJKy7SAQADAgADeAADPQQ"
         ],
         "videos": [
@@ -158,7 +158,7 @@ def generate_link(message):
     bot.reply_to(message, structure_text, parse_mode="Markdown")
 
 # =====================================================================
-# 📦 STEP 5: USER CHECKOUT & FLOW PIPELINE (STRICT TRACKING ENGINE)
+# 📦 STEP 5: USER CHECKOUT & FLOW PIPELINE (ALBUM ENGINE)
 # =====================================================================
 
 @bot.message_handler(commands=['start'])
@@ -206,8 +206,6 @@ def ask_for_utr(call):
         amount = data_parts[2]
         
         bot.answer_callback_query(call.id)
-        
-        # 🎯 TRACKING 1: Blue circled prompt message ki ID save ki
         prompt_msg = bot.send_message(chat_id, "⌨️ *Verification Prompt:*\n\n*Please type and send your 12-digit Transaction UTR Number as a text reply here:*", parse_mode="Markdown")
         bot.register_next_step_handler(prompt_msg, forward_utr_to_admin, token, amount, prompt_msg.message_id)
     except Exception as e:
@@ -228,13 +226,10 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
             return
 
         processed_utrs.add(utr_text)
-        
-        # 🎯 TRACKING 2: Checking status message ki ID save ki
         status_msg = bot.send_message(chat_id, "⌛ *Status Alert: Your payment is being verified by our server. Please hold for up to 60 seconds...*", parse_mode="Markdown")
         status_msg_id = status_msg.message_id
         
         admin_markup = InlineKeyboardMarkup()
-        # Callback data mein dono tracking IDs aur target user ID bhej rahe hain
         approve_btn = InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app:{chat_id}:{token}:{prompt_msg_id}:{status_msg_id}")
         reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:{utr_text}:{prompt_msg_id}:{status_msg_id}")
         admin_markup.row(approve_btn, reject_btn)
@@ -261,88 +256,94 @@ def handle_admin_decision(call):
         if call.from_user.id != ADMIN_ID:
             bot.answer_callback_query(call.id, "❌ System Protection: Not Authorized!", show_alert=True)
             return
-
+            
         action_parts = call.data.split(':')
         action = action_parts[0]
-
+        
         if action == "adm_app":
             target_user_id = int(action_parts[1])
             token = action_parts[2]
             prompt_msg_id = int(action_parts[3])
             status_msg_id = int(action_parts[4])
-
-            bot.answer_callback_query(call.id, "✅ Gateway Action: Payment Approved!")
             
-            # FIXED BOLD TEXT: Double ** ki jagah single * use kiya aur parse_mode="Markdown" add kiya
-            updated_text = call.message.text + "\n\n🟢 *Status Panel: Approved & Premium Delivered*"
-            bot.edit_message_text(chat_id=ADMIN_ID, message_id=call.message.message_id, text=updated_text, parse_mode="Markdown")
-
-            # Text messages deletion logic before delivery trigger
+            bot.answer_callback_query(call.id, "✅ Gateway Action: Payment Approved!")
+            bot.edit_message_text(chat_id=ADMIN_ID, message_id=call.message.message_id, 
+                                  text=call.message.text + "\n\n🟢 **Status Panel: Approved & Premium Delivered**")
+            
             try:
                 bot.delete_message(chat_id=target_user_id, message_id=prompt_msg_id)
                 bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
             except Exception as del_err:
-                print(f"Pre-delivery text deletion failed: { del_err}")
-
-            # Send initial dynamic sending status tracking text message
+                print(f"Pre-delivery text deletion failed: {del_err}")
+            
             custom_msg = bot.send_message(target_user_id, "🎉 *Payment successful!*\n*Media Sending...*", parse_mode="Markdown")
             
-            # Trigger modified delivery engine sequence with target handling ID
             deliver_media(target_user_id, token, custom_msg.message_id)
-
+            
         elif action == "adm_rej":
             target_user_id = int(action_parts[1])
             utr_key = action_parts[2]
             prompt_msg_id = int(action_parts[3])
             status_msg_id = int(action_parts[4])
-
-            bot.answer_callback_query(call.id, "❌ Gateway Action: Claim Rejected!")
             
-            # FIXED BOLD TEXT FOR REJECT: Added single * and parse_mode="Markdown"
-            updated_text = call.message.text + "\n\n🔴 *Status Panel: Rejected by System Admin*"
-            bot.edit_message_text(chat_id=ADMIN_ID, message_id=call.message.message_id, text=updated_text, parse_mode="Markdown")
-
+            bot.answer_callback_query(call.id, "❌ Gateway Action: Claim Rejected!")
+            bot.edit_message_text(chat_id=ADMIN_ID, message_id=call.message.message_id, 
+                                  text=call.message.text + "\n\n🔴 **Status Panel: Rejected by System Admin**")
+            
             try:
                 bot.delete_message(chat_id=target_user_id, message_id=prompt_msg_id)
                 bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
             except Exception as del_err:
-                print(f"Reject mode text deletion failed: { del_err}")
-
+                print(f"Reject mode text deletion failed: {del_err}")
+                
             bot.send_message(target_user_id, "❌ *Verification Failed: Admin has rejected your payment status. Please confirm the correct UTR details and try again.*", parse_mode="Markdown")
             processed_utrs.discard(utr_key)
-
+            
     except Exception as e:
-        print(f"Callback Error: { e}")
+        print(f"Callback Error: {e}")
 
 # =====================================================================
-# 📦 STEP 7: DIRECT MEDIA DELIVERY ENGINE (SAFE VERIFIED QUEUE)
+# 📦 STEP 7: BULLETPROOF MEDIA GROUP DELIVERY ENGINE (ALBUM SYSTEM)
 # =====================================================================
 def deliver_media(chat_id, token, custom_msg_id):
     try:
-        media_data = saved_links.get(token, saved_links.get("499d7f1d0638", {}))
-        media_sent_successfully = False
-
-        # Photos and Videos Sequential Delivery Pipeline
-        for m_type in ["photos", "videos"]:
-            if m_type in media_data:
-                for mid in media_data[m_type]:
-                    if "YAHAN_" in str(mid) or not mid: continue
-                    try:
-                        getattr(bot, f"send_{m_type[:-1]}")(chat_id, str(mid).strip())
-                        media_sent_successfully = True
-                        time.sleep(1.5)
-                    except Exception as e:
-                        print(f"{m_type.capitalize()} stream error: {e}")
-
-        time.sleep(1)
-        if media_sent_successfully:
-            try:
-                bot.delete_message(chat_id=chat_id, message_id=custom_msg_id)
-            except Exception as cleanup_err:
-                print(f"Cleanup error: {cleanup_err}")
+        media_data = {}
+        if token in saved_links:
+            media_data = saved_links[token]
         else:
-            error_text = "⚠ *System Alert: Payment verified but Premium Contents could not be delivered!*\n\n❌ *Reason:* Invalid/expired File IDs.\n\n📢 *Action:* Contact Admin."
-            bot.edit_message_text(chat_id=chat_id, message_id=custom_msg_id, text=error_text, parse_mode="Markdown")
+            if "499d7f1d0638" in saved_links:
+                media_data = saved_links["499d7f1d0638"]
+
+        media_group = []
+
+        # 📸 Photos Collection
+        if "photos" in media_data:
+            for photo_id in media_data["photos"]:
+                if "YAHAN_" in str(photo_id) or not photo_id:
+                    continue
+                media_group.append(telebot.types.InputMediaPhoto(str(photo_id).strip()))
+                    
+        # 🎥 Videos Collection
+        if "videos" in media_data:
+            for video_id in media_data["videos"]:
+                if "YAHAN_" in str(video_id) or not video_id:
+                    continue
+                media_group.append(telebot.types.InputMediaVideo(str(video_id).strip()))
+                    
+        # 🚀 Instant Album Transmission
+        if media_group:
+            bot.send_media_group(chat_id, media_group)
+            print(f"DEBUG: Successfully sent an album of {len(media_group)} files.")
+            time.sleep(1)
+        else:
+            bot.send_message(chat_id, "⚠️ *System Notice: No valid premium content found in this package bundle.*", parse_mode="Markdown")
+
+        # 🎯 🔥 CLEANUP SEQUENCE: Media deliver hone ke baad custom message delete
+        try:
+            bot.delete_message(chat_id=chat_id, message_id=custom_msg_id)
+        except Exception as cleanup_err:
+            print(f"Status cleanup logic break: {cleanup_err}")
+                    
     except Exception as e:
         print(f"Global Delivery Engine Error: {e}")
 
