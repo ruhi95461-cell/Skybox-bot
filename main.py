@@ -30,24 +30,25 @@ saved_links = {
     "499d7f1d0638": {
         "amount": 1.00,
         "photos": [
-            "AgACAgUAAxkBAAIFcWrKXiNhwiP3gTNbHj7oyr2d0KnjAALhE2sbjdVRVtfSc0J0EVRKAQADAgADeQADPQQ"
-            "AgACAgUAAxkBAAIFcmrKXiMh_avg8qH18-xsUGpxC3JvAALiE2sbjdVRVolwvKa3ahTFAQADAgADeQADPQQ"
+            "AgACAgUAAxkBAAIFcWrkXiNhw1P3gTNbHj7oyr2d0KNjAALHE2sbjdVRVtfSc0J0EVRKAQADAgADeQADPQQ",
+            "AgACAgUAAxkBAAIFcmrKXiMh_avg8qH18-xsUGpxC3JvAAL1E2sbjdVRVo1wvkA3ahTFAQADAgADeQADPQQ"
         ],
         "videos": [
-            "BAACAgUAAxkBAAIFdWrKXj6JrQ2eMVyDKXFQPLNC8g4FAAI6IQACjdVRVgX9YrqjKeJIPQQ"
+            "BAACAgUAAxkBAAIFdWrkXj6JrQ2eMVyDKXfQPLNC8g4FAAIGIQACjdVRVgX9YrqjKeJiPQQ"
         ]
-    }
-},
+    },
+
     "8bd622bab1a6": {
-        "amount": 2.0,
+        "amount": 2.00,
         "photos": [
-            "AgACAgUAAxkBAAIFo2rKeWPuow-5ayfkefMOPAnJfa4NAAIWFGsbjdVRVkZx6iW15qH8AQADAgADeQADPQQ",
+            "AgACAgUAAxkBAAIFo2rKeWPuow-5ayfkefMOPAnJfa4NAAINFGsbidVRVkZx61W15qH8AQADAgADeQADPQQ",
             "YAHAN_SECOND_PHOTO_FILE_ID"
         ],
         "videos": [
-            "BAACAgUAAxkBAAIFpWrKeWjRrkERDZcPe6Cq38uSfYyXAAJeIQACjdVRVmF7l4XhaIeSPQQ"
+            "BAACAgUAAxkBAAIFpWrKeWjRrKErDZcPe6Cq38u5fyyXAAJeIQACjdVRVmF714XhaIeSPQQ"
         ]
     }
+}
 
 # =====================================================================
 # 📦 STEP 3: HELPER FUNCTIONS & WEB SERVER FOR RENDER
