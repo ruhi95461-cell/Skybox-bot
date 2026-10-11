@@ -189,46 +189,53 @@ def start_payment(message):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('sub_utr:'))
 def ask_for_utr(call):
-    chat_id = call.message.chat.id
-    data_parts = call.data.split(':')
-    token = data_parts[1]
-    amount = data_parts[2]
-    
-    bot.answer_callback_query(call.id)
-    msg = bot.send_message(chat_id, "⌨️ Kripya apna **12 digit ka UTR Number** ya transaction detail reply text mein likh kar bheinjein:")
-    bot.register_next_step_handler(msg, forward_utr_to_admin, token, amount)
+    try:
+        chat_id = call.message.chat.id
+        data_parts = call.data.split(':')
+        token = data_parts[1]
+        amount = data_parts[2]
+        
+        bot.answer_callback_query(call.id)
+        msg = bot.send_message(chat_id, "⌨️ Kripya apna **12 digit ka UTR Number** ya transaction detail reply text mein likh kar bheinjein:")
+        bot.register_next_step_handler(msg, forward_utr_to_admin, token, amount)
+    except Exception as e:
+        print(f"Ask UTR Callback Error: {e}")
 
 def forward_utr_to_admin(message, token, amount):
-    chat_id = message.chat.id
-    user_name = message.from_user.first_name or "User"
-    utr_text = message.text.strip() if message.text else ""
-    
-    if not utr_text:
-        bot.reply_to(message, "❌ Kripya sirf Text mein UTR likh kar bheinjein. Link par fir se click karke retry karein.")
-        return
+    try:
+        chat_id = message.chat.id
+        user_name = message.from_user.first_name or "User"
+        utr_text = message.text.strip() if message.text else ""
+        
+        if not utr_text:
+            bot.reply_to(message, "❌ Kripya sirf Text mein UTR likh kar bheinjein. Link par fir se click karke retry karein.")
+            return
 
-    if utr_text in processed_utrs:
-        bot.send_message(chat_id, "⚠️ *Aapka yeh payment verification pehle se processing mein hai!*", parse_mode="Markdown")
-        return
+        if utr_text in processed_utrs:
+            bot.send_message(chat_id, "⚠️ *Aapka yeh payment verification pehle se processing mein hai!*", parse_mode="Markdown")
+            return
 
-    processed_utrs.add(utr_text)
-    bot.send_message(chat_id, "⌛ *Aapka payment check ho raha hai. Please kripya 1 minute tak wait karein...*", parse_mode="Markdown")
-    
-    admin_markup = InlineKeyboardMarkup()
-    approve_btn = InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app:{chat_id}:{token}:{utr_text}")
-    reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:{utr_text}")
-    admin_markup.row(approve_btn, reject_btn)
-    
-    admin_alert_text = (
-        "🔔 *Manual Alert: New Manual Verification Request!*\n\n"
-        f"👤 *User:* {user_name} (`{chat_id}`)\n"
-        f"💰 *Expected Amount:* ₹{amount}\n"
-        f"📦 *Link Token:* `{token}`\n"
-        f"🆔 *Submitted UTR:* `{utr_text}`\n\n"
-        "📎 *Action:* Details verify karke manual approve ya reject karein."
-    )
-    
-    bot.send_message(ADMIN_ID, admin_alert_text, parse_mode="Markdown", reply_markup=admin_markup)
+        processed_utrs.add(utr_text)
+        bot.send_message(chat_id, "⌛ *Aapka payment check ho raha hai. Please kripya 1 minute tak wait karein...*", parse_mode="Markdown")
+        
+        admin_markup = InlineKeyboardMarkup()
+        # Clean safe callback format without extra colons
+        approve_btn = InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app:{chat_id}:{token}")
+        reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}")
+        admin_markup.row(approve_btn, reject_btn)
+        
+        admin_alert_text = (
+            "🔔 *Manual Alert: New Manual Verification Request!*\n\n"
+            f"👤 *User:* {user_name} (`{chat_id}`)\n"
+            f"💰 *Expected Amount:* ₹{amount}\n"
+            f"📦 *Link Token:* `{token}`\n"
+            f"🆔 *Submitted UTR:* `{utr_text}`\n\n"
+            "📎 *Action:* Details verify karke manual approve ya reject karein."
+        )
+        
+        bot.send_message(ADMIN_ID, admin_alert_text, parse_mode="Markdown", reply_markup=admin_markup)
+    except Exception as e:
+        print(f"Forward UTR Error: {e}")
 
 # =====================================================================
 # 📦 STEP 6: ADMIN CORE DECISION CALLBACK HANDLER & DELIVERY
@@ -256,16 +263,12 @@ def handle_admin_decision(call):
             
         elif action == "adm_rej":
             target_user_id = int(action_parts[1])
-            utr_key = action_parts[2]
             
             bot.answer_callback_query(call.id, "❌ Claim Rejected!")
             bot.edit_message_text(chat_id=ADMIN_ID, message_id=call.message.message_id, 
                                   text=call.message.text + "\n\n🔴 **Status: Rejected by Admin**")
             
             bot.send_message(target_user_id, "❌ Sorry! Admin ne aapka payment status reject kar diya hai. Kripya correct UTR verify karke dobara bhejein.")
-            
-            # Anti-spam cache se release karein taaki user sahi UTR dobara bhej sake
-            processed_utrs.discard(utr_key)
             
     except Exception as e:
         print(f"Callback Error: {e}")
@@ -276,28 +279,38 @@ def handle_admin_decision(call):
 def deliver_media(chat_id, token):
     try:
         media_data = {}
+        
+        # Exact token match verify karein
         if token in saved_links:
             media_data = saved_links[token]
         else:
+            # Fallback agar token dynamic strings mein thoda space le raha ho
+            for k, v in saved_links.items():
+                if str(k).strip() == str(token).strip():
+                    media_data = v
+                    break
+        
+        # Agar naye token mein data nahi mila toh base token ka media safety ke liye bheinjein
+        if not media_data or (not media_data.get("photos") and not media_data.get("videos")):
             if "499d7f1d0638" in saved_links:
                 media_data = saved_links["499d7f1d0638"]
-                
-        # Photos Loop
+
+        # 📸 Photos Delivery Loop
         for photo_id in media_data.get("photos", []):
-            if "YAHAN_" in str(photo_id):  # Placeholder / dummy string ko skip karega
+            if "YAHAN_" in str(photo_id) or not photo_id:
                 continue
             try:
-                bot.send_photo(chat_id, photo_id)
+                bot.send_photo(chat_id, str(photo_id).strip())
                 time.sleep(1)
             except Exception as e:
                 print(f"Photo delivery failed: {e}")
                 
-        # Videos Loop
+        # 🎥 Videos Delivery Loop
         for video_id in media_data.get("videos", []):
-            if "YAHAN_" in str(video_id):  # Placeholder / dummy string ko skip karega
+            if "YAHAN_" in str(video_id) or not video_id:
                 continue
             try:
-                bot.send_video(chat_id, video_id)
+                bot.send_video(chat_id, str(video_id).strip())
                 time.sleep(1)
             except Exception as e:
                 print(f"Video delivery failed: {e}")
