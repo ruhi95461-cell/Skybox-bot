@@ -46,7 +46,6 @@ saved_links = {
             "BAACAgUAAxkBAAIF02rL5aDw6ZGNFv-xZppIJupdJtBeAAKOIAACjdVRVjFdzqDuT1MqPQQ"
         ]
     }
-}
 
 # =====================================================================
 # 📦 STEP 3: HELPER FUNCTIONS & WEB SERVER FOR RENDER
