@@ -45,7 +45,7 @@ saved_links = {
         "videos": [
             "BAACAgUAAxkBAAIGM2rMAXWjtjTOAs2MDIstwbQOi3jsAAJaOwACc8ZgVph3gIZy2dNGPQQ"
         ]
-    }  
+    },
 
     "a3a1d01468ba": {
         "amount": 65.00,
