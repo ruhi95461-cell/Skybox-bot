@@ -135,7 +135,7 @@ def generate_link(message):
     )
     
     # Temporary simulation copy
-    base_token = "499d7f1d0638"
+    base_token = "8bd622bab1a6"
     default_photos = saved_links[base_token]["photos"] if base_token in saved_links else []
     default_videos = saved_links[base_token]["videos"] if base_token in saved_links else []
     
@@ -148,7 +148,7 @@ def generate_link(message):
     bot.reply_to(message, structure_text, parse_mode="Markdown")
 
 # =====================================================================
-# 📦 STEP 5: USER CHECKOUT & FLOW PIPELINE
+# 📦 STEP 5: USER CHECKOUT & FLOW PIPELINE (WITH MESSAGE ID TRACKING)
 # =====================================================================
 
 @bot.message_handler(commands=['start'])
@@ -208,7 +208,7 @@ def forward_utr_to_admin(message, token, amount):
         utr_text = message.text.strip() if message.text else ""
         
         if not utr_text:
-            bot.reply_to(message, "❌ Kripya sirf Text mein UTR likh kar bheinjein. Link par fir se click karke retry karein.")
+            bot.reply_to(message, "❌ Kripya sirf Text mein UTR bheinjein. Retry karein.")
             return
 
         if utr_text in processed_utrs:
@@ -216,12 +216,14 @@ def forward_utr_to_admin(message, token, amount):
             return
 
         processed_utrs.add(utr_text)
-        bot.send_message(chat_id, "⌛ *Aapka payment check ho raha hai. Please kripya 1 minute tak wait karein...*", parse_mode="Markdown")
+        
+        # 🎯 TRACKING MESSAGE: Is message ki ID save karenge taaki baad mein delete kar sakein
+        status_msg = bot.send_message(chat_id, "⌛ *Aapka payment check ho raha hai. Please kripya 1 minute tak wait karein...*", parse_mode="Markdown")
+        status_msg_id = status_msg.message_id
         
         admin_markup = InlineKeyboardMarkup()
-        # Clean safe callback format without extra colons
-        approve_btn = InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app:{chat_id}:{token}")
-        reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}")
+        approve_btn = InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app:{chat_id}:{token}:{status_msg_id}")
+        reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:{utr_text}:{status_msg_id}")
         admin_markup.row(approve_btn, reject_btn)
         
         admin_alert_text = (
@@ -238,12 +240,11 @@ def forward_utr_to_admin(message, token, amount):
         print(f"Forward UTR Error: {e}")
 
 # =====================================================================
-# 📦 STEP 6: ADMIN CORE DECISION CALLBACK HANDLER & DELIVERY
+# 📦 STEP 6: ADMIN CORE DECISION CALLBACK HANDLER & LINK DELIVERY
 # =====================================================================
 @bot.callback_query_handler(func=lambda call: call.data.startswith('adm_'))
 def handle_admin_decision(call):
     try:
-        # Check authorization
         if call.from_user.id != ADMIN_ID:
             bot.answer_callback_query(call.id, "❌ Not Authorized!", show_alert=True)
             return
@@ -254,44 +255,57 @@ def handle_admin_decision(call):
         if action == "adm_app":
             target_user_id = int(action_parts[1])
             token = action_parts[2]
+            status_msg_id = int(action_parts[3])
             
             bot.answer_callback_query(call.id, "✅ Payment Approved!")
             bot.edit_message_text(chat_id=ADMIN_ID, message_id=call.message.message_id, 
                                   text=call.message.text + "\n\n🟢 **Status: Approved & Media Delivered**")
             
-            bot.send_message(target_user_id, "🎉 Aapka payment verify ho gaya hai! Aapka media niche deliver kiya ja raha hai:")
-            deliver_media(target_user_id, token)
+            # 🔥 AUTOMATIC DELETE: Purana status check message user ki chat se delete karein
+            try:
+                bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
+            except Exception as del_err:
+                print(f"Status message deletion failed: {del_err}")
+            
+            # 🎯 NEW CUSTOM MESSAGE: Sending status text generate kiya aur iski ID track ki
+            custom_msg = bot.send_message(target_user_id, "🎉 *Payment successful!*\n*Media Sending...*", parse_mode="Markdown")
+            custom_msg_id = custom_msg.message_id
+            
+            # Media delivery process execute karein (custom message ID ke sath)
+            deliver_media(target_user_id, token, custom_msg_id)
             
         elif action == "adm_rej":
             target_user_id = int(action_parts[1])
             utr_key = action_parts[2]
+            status_msg_id = int(action_parts[3])
             
             bot.answer_callback_query(call.id, "❌ Claim Rejected!")
             bot.edit_message_text(chat_id=ADMIN_ID, message_id=call.message.message_id, 
                                   text=call.message.text + "\n\n🔴 **Status: Rejected by Admin**")
             
+            # 🔥 AUTOMATIC DELETE: Reject karne par bhi purana status check message delete karein
+            try:
+                bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
+            except Exception as del_err:
+                print(f"Status message deletion failed: {del_err}")
+                
             bot.send_message(target_user_id, "❌ Sorry! Admin ne aapka payment status reject kar diya hai. Kripya correct UTR verify karke dobara bhejein.")
-            
-            # Release UTR from anti-spam cache
             processed_utrs.discard(utr_key)
             
     except Exception as e:
         print(f"Callback Error: {e}")
 
 # =====================================================================
-# 📦 STEP 7: DIRECT MEDIA DELIVERY ENGINE (PHOTOS & VIDEOS)
+# 📦 STEP 7: DIRECT MEDIA DELIVERY ENGINE (WITH FINAL CLEANUP)
 # =====================================================================
-def deliver_media(chat_id, token):
+def deliver_media(chat_id, token, custom_msg_id):
     try:
         media_data = {}
-        
-        # Verify if token exists in database
         if token in saved_links:
             media_data = saved_links[token]
         else:
-            # Fallback configuration
-            if "499d7f1d0638" in saved_links:
-                media_data = saved_links["499d7f1d0638"]
+            if "8bd622bab1a6" in saved_links:
+                media_data = saved_links["8bd622bab1a6"]
 
         # 📸 Photos Loop Execution
         if "photos" in media_data:
@@ -300,7 +314,7 @@ def deliver_media(chat_id, token):
                     continue
                 try:
                     bot.send_photo(chat_id, str(photo_id).strip())
-                    time.sleep(1) # Spamtrap bypass delay
+                    time.sleep(1)
                 except Exception as e:
                     print(f"Photo delivery failed: {e}")
                     
@@ -311,9 +325,16 @@ def deliver_media(chat_id, token):
                     continue
                 try:
                     bot.send_video(chat_id, str(video_id).strip())
-                    time.sleep(1) # Spamtrap bypass delay
+                    time.sleep(1)
                 except Exception as e:
                     print(f"Video delivery failed: {e}")
+                    
+        # 🔥 FINAL AUTOMATIC DELETE: Sabhi photos aur videos successfully bheinje jaane ke baad custom message delete karein
+        try:
+            bot.delete_message(chat_id=chat_id, message_id=custom_msg_id)
+            print("DEBUG: Custom sending status message deleted successfully after delivery.")
+        except Exception as del_err:
+            print(f"Custom message deletion failed: {del_err}")
                     
     except Exception as e:
         print(f"Global Delivery Engine Error: {e}")
