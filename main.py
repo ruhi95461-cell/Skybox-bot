@@ -25,16 +25,15 @@ app = Flask('')
 processed_utrs = set()  # Active UTR cache memory to prevent spam
 
 # 💡 LIFETIME FORWARDER DATABASE: Yahan apne product channels link karein
-# Note: "channel_id" mein channel ka username (jaise '@channelname') ya numerical ID (-10012345678) dalein.
 saved_links = {
-    "499d7f1d0638": {
-        "amount": 1.00,
-        "channel_id": "@SkyBoxTestChannel1"  # 👈 Yahan apna Pehla Private Channel ka ID dalein
+    "585f5f2f9ec1": {
+        "amount": 55.00,
+        "channel_id": "-1004389531080" 
     }, 
 
     "712033235ffd": {
         "amount": 3.00,
-        "channel_id": "@SkyBoxTestChannel2"  # 👈 Yahan apna Doosra Private Channel ka ID dalein
+        "channel_id": "@SkyBoxTestChannel2"  
     },
 
     "a3a1d01468ba": {
