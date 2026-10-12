@@ -67,6 +67,55 @@ saved_links = {
 # 📦 STEP 3: HELPER FUNCTIONS & WEB SERVER FOR RENDER
 # =====================================================================
 def generate_upi_qr(upi_id, amount):
+import telebot
+import time
+import secrets
+import os
+import qrcode
+import io
+from flask import Flask
+from threading import Thread
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+# =====================================================================
+# 📦 STEP 1: CONFIGURATION & CONFIG BLOCK (PREMIUM EMISSARY)
+# =====================================================================
+BOT_TOKEN = "8963839676:AAHGTnd6QcysW9DrCUMQrnW8xRf52J-wBe8" 
+ADMIN_ID = 8393210427
+UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
+BOT_USERNAME = "SkyBoxx_bot"
+
+bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
+app = Flask('')
+
+# =====================================================================
+# 📦 STEP 2: REGISTER CACHES & PERMANENT TELE-FORWARD DATABASE
+# =====================================================================
+processed_utrs = set()  # Active UTR cache memory to prevent spam
+
+# 💡 LIFETIME FORWARDER DATABASE: Yahan apne product channels link karein
+# Note: "channel_id" mein channel ka username (jaise '@channelname') ya numerical ID (-10012345678) dalein.
+saved_links = {
+    "499d7f1d0638": {
+        "amount": 1.00,
+        "channel_id": "@SkyBoxTestChannel1"  # 👈 Yahan apna Pehla Private Channel ka ID dalein
+    }, 
+
+    "712033235ffd": {
+        "amount": 3.00,
+        "channel_id": "@SkyBoxTestChannel2"  # 👈 Yahan apna Doosra Private Channel ka ID dalein
+    },
+
+    "a3a1d01468ba": {
+        "amount": 65.00,
+        "channel_id": "@SkyBox65RsChannel"   # 👈 Yahan apna 65 Rs wale Private Channel ka ID dalein
+    }
+}
+
+# =====================================================================
+# 📦 STEP 3: HELPER FUNCTIONS & WEB SERVER FOR RENDER
+# =====================================================================
+def generate_upi_qr(upi_id, amount):
     upi_url = f"upi://pay?pa={upi_id}&am={amount}&cu=INR"
     qr = qrcode.QRCode(version=1, box_size=10, border=4)
     qr.add_data(upi_url)
@@ -80,7 +129,7 @@ def generate_upi_qr(upi_id, amount):
 
 @app.route('/')
 def home():
-    return "Skybox Bot is Running Online on Render!"
+    return "Skybox Forwarder Bot is Running Online on Render!"
 
 def run():
     port = int(os.environ.get("PORT", 8080))
@@ -93,16 +142,6 @@ def keep_alive():
 # =====================================================================
 # 📦 STEP 4: TELEGRAM ADMIN COMMANDS & HANDLERS
 # =====================================================================
-
-@bot.message_handler(content_types=['photo', 'video'])
-def get_file_id_handler(message):
-    if message.from_user.id == ADMIN_ID:
-        if message.content_type == 'photo':
-            file_id = message.photo[-1].file_id
-            bot.reply_to(message, f"📸 *Photo File ID Detected:*\n\n`{file_id}`\n\nIse aap code ke upar `saved_links` mein manually paste kar sakte hain.", parse_mode="Markdown")
-        elif message.content_type == 'video':
-            file_id = message.video.file_id
-            bot.reply_to(message, f"🎥 *Video File ID Detected:*\n\n`{file_id}`\n\nIse aap code ke upar `saved_links` mein manually paste kar sakte hain.", parse_mode="Markdown")
 
 @bot.message_handler(commands=['gen'])
 def generate_link(message):
@@ -122,43 +161,33 @@ def generate_link(message):
         
     for token_key, data in saved_links.items():
         if data.get("amount") == amount:
-            bot.reply_to(message, f"📢 *Database Conflict Alert!*\n\n*Price Level ₹{amount} is already active under token:* `{token_key}`\n\n*Please choose a different unique value.*", parse_mode="Markdown")
+            bot.reply_to(message, f"📢 *Database Conflict Alert!*\n\n*Price Level ₹{amount} is already active under token:* `{token_key}`", parse_mode="Markdown")
             return
         
     unique_token = secrets.token_hex(6)
     user_link = f"https://t.me/{BOT_USERNAME}?start={unique_token}"
     
     structure_text = (
-        f"👑 *Gateway Link Generated Successfully!*\n\n"
+        f"👑 *Gateway Forwarder Link Generated!* 👑\n\n"
         f"🔗 *User Action Link:* `{user_link}`\n\n"
         f"⚙️ *GitHub Permanent Code Bracket:*\n"
         f"```python\n"
         f"    \"{unique_token}\": {{\n"
         f"        \"amount\": {amount},\n"
-        f"        \"photos\": [\n"
-        f"            \"YAHAN_FIRST_PHOTO_FILE_ID\"\n"
-        f"        ],\n"
-        f"        \"videos\": [\n"
-        f"            \"YAHAN_VIDEO_FILE_ID\"\n"
-        f"        ]\n"
+        f"        \"channel_id\": \"YAHAN_APNE_NEW_CHANNEL_KI_ID_DALEIN\"\n"
         f"    }}\n"
         f"```"
     )
     
-    base_token = "499d7f1d0638"
-    default_photos = saved_links[base_token]["photos"] if base_token in saved_links else []
-    default_videos = saved_links[base_token]["videos"] if base_token in saved_links else []
-    
     saved_links[unique_token] = {
         "amount": amount,
-        "photos": default_photos, 
-        "videos": default_videos
+        "channel_id": "@ChangeMe"
     }
     
     bot.reply_to(message, structure_text, parse_mode="Markdown")
 
 # =====================================================================
-# 📦 STEP 5: USER CHECKOUT & FLOW PIPELINE (ALBUM ENGINE)
+# 📦 STEP 5: USER CHECKOUT & FLOW PIPELINE (FORWARDING CORE TRACKING)
 # =====================================================================
 
 @bot.message_handler(commands=['start'])
@@ -206,6 +235,8 @@ def ask_for_utr(call):
         amount = data_parts[2]
         
         bot.answer_callback_query(call.id)
+        
+        # 🎯 TRACKING 1: Blue circled prompt message ki ID save ki (Mark wala message)
         prompt_msg = bot.send_message(chat_id, "⌨️ *Verification Prompt:*\n\n*Please type and send your 12-digit Transaction UTR Number as a text reply here:*", parse_mode="Markdown")
         bot.register_next_step_handler(prompt_msg, forward_utr_to_admin, token, amount, prompt_msg.message_id)
     except Exception as e:
@@ -226,6 +257,8 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
             return
 
         processed_utrs.add(utr_text)
+        
+        # 🎯 TRACKING 2: Checking status message ki ID save ki
         status_msg = bot.send_message(chat_id, "⌛ *Status Alert: Your payment is being verified by our server. Please hold for up to 60 seconds...*", parse_mode="Markdown")
         status_msg_id = status_msg.message_id
         
@@ -270,17 +303,17 @@ def handle_admin_decision(call):
             bot.edit_message_text(chat_id=ADMIN_ID, message_id=call.message.message_id, 
                                   text=call.message.text + "\n\n🟢 **Status Panel: Approved & Premium Delivered**")
             
-            # 🔥 AUTOMATIC DELETE: Dono temporary text messages accept par click hote hi delete
+            # 🔥 AUTOMATIC DELETE: Accept par click karte hi Mark wala aur status message delete!
             try:
                 bot.delete_message(chat_id=target_user_id, message_id=prompt_msg_id)
                 bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
             except Exception as del_err:
                 print(f"Pre-delivery text deletion failed: {del_err}")
             
-            # 🎯 NEW CUSTOM STATUS TEXT
+            # 🎯 STYLISH CUSTOM TEXT STATUS:
             custom_msg = bot.send_message(target_user_id, "🎉 *Payment successful!*\n*Media Sending...*", parse_mode="Markdown")
             
-            # 🚀 Strict Queue Delivery call
+            # 🚀 Forwarder Engine call karke state tracking message id ko pass kiya
             deliver_media(target_user_id, token, custom_msg.message_id)
             
         elif action == "adm_rej":
@@ -293,6 +326,7 @@ def handle_admin_decision(call):
             bot.edit_message_text(chat_id=ADMIN_ID, message_id=call.message.message_id, 
                                   text=call.message.text + "\n\n🔴 **Status Panel: Rejected by System Admin**")
             
+            # 🔥 AUTOMATIC DELETE: Reject karne par bhi dono text messages chat se gayab!
             try:
                 bot.delete_message(chat_id=target_user_id, message_id=prompt_msg_id)
                 bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
@@ -306,9 +340,9 @@ def handle_admin_decision(call):
         print(f"Callback Error: {e}")
 
 # =====================================================================
-# 📦 STEP 7: DIRECT SECURE TRANSMISSION PIPELINE (ANTI-FREEZE METHOD)
+# 📦 STEP 7: PRIVATE CHANNEL MESSAGES AUTO-FORWARD ENGINE
 # =====================================================================
-def deliver_media(chat_id, token, target_msg_id):
+def deliver_media(chat_id, token, custom_msg_id):
     try:
         media_data = {}
         if token in saved_links:
@@ -317,53 +351,45 @@ def deliver_media(chat_id, token, target_msg_id):
             if "499d7f1d0638" in saved_links:
                 media_data = saved_links["499d7f1d0638"]
 
-        media_actually_sent = False
+        channel_id = media_data.get("channel_id", "")
+        media_forwarded = False
 
-        # 📸 Photos Transmission Sequence
-        if "photos" in media_data:
-            for photo_id in media_data["photos"]:
-                if "YAHAN_" in str(photo_id) or not photo_id:
-                    continue
+        if channel_id and channel_id != "@ChangeMe":
+            # 🚀 TELE-FORWARD ENGINE: Channel ke messages ko bulk forward karega!
+            # Loop range ko aap channel ke top uploded total messages ke hisab se set kar sakte hain (e.g. 1 se 100 tak ke id slots)
+            for msg_id in range(1, 100):
                 try:
-                    bot.send_photo(chat_id, str(photo_id).strip())
-                    media_actually_sent = True
-                    time.sleep(1.5) # Network safe space sync
-                except Exception as photo_err:
-                    print(f"Individual photo skip error: {photo_err}")
-                    
-        # 🎥 Videos Transmission Sequence (With High-Buffer Safe Sleep Delay)
-        if "videos" in media_data:
-            for video_id in media_data["videos"]:
-                if "YAHAN_" in str(video_id) or not video_id:
+                    bot.forward_message(chat_id=chat_id, from_chat_id=channel_id, message_id=msg_id)
+                    media_forwarded = True
+                    time.sleep(1.0) # Safe buffer speed delay taaki account restriction ya heavy flood na aaye
+                except Exception as forward_err:
+                    # Slot khali hone par ya message id delete hone par loop skip karega bina engine crash kiye
                     continue
-                try:
-                    bot.send_video(chat_id, str(video_id).strip())
-                    media_actually_sent = True
-                    time.sleep(3.5) # 🔥 IMPORTANT: Heavy video buffering ke liye 3.5 seconds ka safe gap taaki Render stream drop na ho!
-                except Exception as video_err:
-                    print(f"Individual video skip error: {video_err}")
-                    
-        # 🎯 🔥 CLEANUP CONTROL: Jab poora stream loop complete chal chuka ho, tabhi custom status hatega
-        if media_actually_sent:
+        
+        # 🎯 🔥 CONTROLLED CLEANUP SEQUENCE: Media verified forward hone ke baad hi dynamic message text delete hoga
+        if media_forwarded:
             time.sleep(1)
             try:
-                bot.delete_message(chat_id=chat_id, message_id=target_msg_id)
-                print("DEBUG: Active text status message cleared safely after full media delivery.")
+                bot.delete_message(chat_id=chat_id, message_id=custom_msg_id)
+                print("DEBUG: Active status layout cleanly optimized after validated auto-forward operations.")
             except Exception as cleanup_err:
-                print(f"Status marker deletion skip: {cleanup_err}")
+                print(f"Status cleanup logic break: {cleanup_err}")
         else:
-            bot.send_message(chat_id, "⚠️ *System Notice: Pack contains placeholder entries or file keys are invalid. Kindly recheck database.*", parse_mode="Markdown")
+            bot.send_message(chat_id, "⚠️ *System Notice: Target channel ID is either incorrect or bot is not added as Admin in the private channel.*", parse_mode="Markdown")
                     
     except Exception as e:
-        print(f"Global Delivery Error: {e}")
+        print(f"Global Delivery Engine Error: {e}")
 
 # =====================================================================
 # 🚀 STEP 8: MAIN LOOP RUNNER CONTROL
 # =====================================================================
 if __name__ == "__main__":
     try:
+        # Render Flask dashboard server background startup trigger
         keep_alive()
-        print("🚀 SkyBox Manual Pro Bot has been successfully updated on Render...")
+        print("🚀 SkyBox Forwarder Pro Bot has been successfully updated on Render...")
+        
+        # Infinite tracking cycle execution system reset recovery handler
         bot.infinity_polling(timeout=10, long_polling_timeout=5)
     except Exception as e:
         print(f"Loop Crash Restarter: {e}")
