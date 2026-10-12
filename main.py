@@ -39,7 +39,7 @@ saved_links = {
 
     "a3a1d01468ba": {
         "amount": 65.00,
-        "channel_id": "@SkyBox65RsChannel"   # 👈 Yahan apna 65 Rs wale Private Channel ka ID dalein
+        "channel_id": "-1004374958890"  
     }
 }
 
