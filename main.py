@@ -270,14 +270,17 @@ def handle_admin_decision(call):
             bot.edit_message_text(chat_id=ADMIN_ID, message_id=call.message.message_id, 
                                   text=call.message.text + "\n\n🟢 **Status Panel: Approved & Premium Delivered**")
             
+            # 🔥 AUTOMATIC DELETE: Dono temporary text messages ko pehle hi gayab karein
             try:
                 bot.delete_message(chat_id=target_user_id, message_id=prompt_msg_id)
                 bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
             except Exception as del_err:
                 print(f"Pre-delivery text deletion failed: {del_err}")
             
+            # 🎯 STATUS TEXT MESSAGE
             custom_msg = bot.send_message(target_user_id, "🎉 *Payment successful!*\n*Media Sending...*", parse_mode="Markdown")
             
+            # 🚀 Delivery function call with explicit message tracking
             deliver_media(target_user_id, token, custom_msg.message_id)
             
         elif action == "adm_rej":
@@ -305,7 +308,7 @@ def handle_admin_decision(call):
 # =====================================================================
 # 📦 STEP 7: BULLETPROOF MEDIA GROUP DELIVERY ENGINE (ALBUM SYSTEM)
 # =====================================================================
-def deliver_media(chat_id, token, custom_msg_id):
+def deliver_media(chat_id, token, target_msg_id):
     try:
         media_data = {}
         if token in saved_links:
@@ -316,14 +319,14 @@ def deliver_media(chat_id, token, custom_msg_id):
 
         media_group = []
 
-        # 📸 Photos Collection
+        # 📸 Photos Collection Pipeline
         if "photos" in media_data:
             for photo_id in media_data["photos"]:
                 if "YAHAN_" in str(photo_id) or not photo_id:
                     continue
                 media_group.append(telebot.types.InputMediaPhoto(str(photo_id).strip()))
                     
-        # 🎥 Videos Collection
+        # 🎥 Videos Collection Pipeline
         if "videos" in media_data:
             for video_id in media_data["videos"]:
                 if "YAHAN_" in str(video_id) or not video_id:
@@ -334,15 +337,16 @@ def deliver_media(chat_id, token, custom_msg_id):
         if media_group:
             bot.send_media_group(chat_id, media_group)
             print(f"DEBUG: Successfully sent an album of {len(media_group)} files.")
-            time.sleep(1)
+            time.sleep(2) # Safe delay for server sync
+            
+            # 🎯 🔥 CLEANUP SEQUENCE: Media successful delivery ke baad hi delete hoga
+            try:
+                bot.delete_message(chat_id=chat_id, message_id=target_msg_id)
+                print("DEBUG: Status message safely deleted after verified delivery.")
+            except Exception as cleanup_err:
+                print(f"Status cleanup logic break: {cleanup_err}")
         else:
             bot.send_message(chat_id, "⚠️ *System Notice: No valid premium content found in this package bundle.*", parse_mode="Markdown")
-
-        # 🎯 🔥 CLEANUP SEQUENCE: Media deliver hone ke baad custom message delete
-        try:
-            bot.delete_message(chat_id=chat_id, message_id=custom_msg_id)
-        except Exception as cleanup_err:
-            print(f"Status cleanup logic break: {cleanup_err}")
                     
     except Exception as e:
         print(f"Global Delivery Engine Error: {e}")
