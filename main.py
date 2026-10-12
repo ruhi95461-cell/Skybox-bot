@@ -40,8 +40,13 @@ saved_links = {
     "a3a1d01468ba": {
         "amount": 65.00,
         "channel_id": "-1004374958890"  
-    }
-}
+    },
+
+    "4ceb022fdee3": {
+        "amount": 68.00, 
+        "channel_id": -1003972171866
+    } 
+} 
 
 # =====================================================================
 # 📦 STEP 3: HELPER FUNCTIONS & WEB SERVER FOR RENDER
