@@ -280,7 +280,7 @@ def handle_admin_decision(call):
             # 🎯 STATUS TEXT MESSAGE
             custom_msg = bot.send_message(target_user_id, "🎉 *Payment successful!*\n*Media Sending...*", parse_mode="Markdown")
             
-            # 🚀 Delivery function call with explicit message tracking
+            # 🚀 Fast Delivery Engine with correct fixed spelling tracing
             deliver_media(target_user_id, token, custom_msg.message_id)
             
         elif action == "adm_rej":
@@ -306,7 +306,7 @@ def handle_admin_decision(call):
         print(f"Callback Error: {e}")
 
 # =====================================================================
-# 📦 STEP 7: BULLETPROOF MEDIA GROUP DELIVERY ENGINE (ALBUM SYSTEM)
+# 📦 STEP 7: DIRECT ASYNCHRONOUS PIPELINE SYSTEM (PHOTOS & VIDEOS)
 # =====================================================================
 def deliver_media(chat_id, token, target_msg_id):
     try:
@@ -317,36 +317,42 @@ def deliver_media(chat_id, token, target_msg_id):
             if "499d7f1d0638" in saved_links:
                 media_data = saved_links["499d7f1d0638"]
 
-        media_group = []
+        media_sent_successfully = False
 
-        # 📸 Photos Collection Pipeline
+        # 📸 Photos Transmission Loop
         if "photos" in media_data:
             for photo_id in media_data["photos"]:
                 if "YAHAN_" in str(photo_id) or not photo_id:
                     continue
-                media_group.append(telebot.types.InputMediaPhoto(str(photo_id).strip()))
+                try:
+                    bot.send_photo(chat_id, str(photo_id).strip())
+                    media_sent_successfully = True
+                    time.sleep(1) # Network safe space sync
+                except Exception as photo_err:
+                    print(f"Individual photo skip error: {photo_err}")
                     
-        # 🎥 Videos Collection Pipeline
+        # 🎥 Videos Transmission Loop
         if "videos" in media_data:
             for video_id in media_data["videos"]:
                 if "YAHAN_" in str(video_id) or not video_id:
                     continue
-                media_group.append(telebot.types.InputMediaVideo(str(video_id).strip()))
+                try:
+                    bot.send_video(chat_id, str(video_id).strip())
+                    media_sent_successfully = True
+                    time.sleep(1.2) # Heavy stream buffer space sync
+                except Exception as video_err:
+                    print(f"Individual video skip error: {video_err}")
                     
-        # 🚀 Instant Album Transmission
-        if media_group:
-            bot.send_media_group(chat_id, media_group)
-            print(f"DEBUG: Successfully sent an album of {len(media_group)} files.")
-            time.sleep(2) # Safe delay for server sync
-            
-            # 🎯 🔥 CLEANUP SEQUENCE: Media successful delivery ke baad hi delete hoga
+        # 🎯 🔥 CLEANUP SEQUENCE: Jab saara media chala jaye, tabhi text hatega
+        if media_sent_successfully:
+            time.sleep(1)
             try:
                 bot.delete_message(chat_id=chat_id, message_id=target_msg_id)
-                print("DEBUG: Status message safely deleted after verified delivery.")
+                print("DEBUG: Active text marker cleared after sequence complete.")
             except Exception as cleanup_err:
-                print(f"Status cleanup logic break: {cleanup_err}")
+                print(f"Marker deletion skip: {cleanup_err}")
         else:
-            bot.send_message(chat_id, "⚠️ *System Notice: No valid premium content found in this package bundle.*", parse_mode="Markdown")
+            bot.send_message(chat_id, "⚠️ *System Notice: Pack contains placeholder entries or file keys are invalid. Kindly recheck database.*", parse_mode="Markdown")
                     
     except Exception as e:
         print(f"Global Delivery Engine Error: {e}")
