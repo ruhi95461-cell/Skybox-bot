@@ -122,7 +122,7 @@ def generate_link(message):
     bot.reply_to(message, structure_text, parse_mode="Markdown")
 
 # =====================================================================
-# 📦 STEP 5: USER CHECKOUT & IMAGE FLOW PIPELINE (FORWARDING CORE TRACKING)
+# 📦 STEP 5: USER CHECKOUT & FLOW PIPELINE (FORWARDING CORE TRACKING)
 # =====================================================================
 
 @bot.message_handler(commands=['start'])
@@ -182,7 +182,6 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
         user_name = message.from_user.first_name or "Premium User"
         user_username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
         
-        # User ko screenshot bhejna hi hoga
         if not message.photo:
             bot.reply_to(message, "❌ *Input Error: Please upload an actual photo screenshot file only! Click checkout to retry.*", parse_mode="Markdown")
             return
@@ -203,7 +202,6 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
         reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:{photo_file_id}:{prompt_msg_id}:{status_msg_id}")
         admin_markup.row(approve_btn, reject_btn)
         
-        # Admin ke liye details jo aapne maangi thi (ID, Username, Amount aur Token)
         admin_alert_text = (
             "🔔 *System Alert: New Payment Request!* 🔔\n\n"
             f"👤 *Customer Name:* {user_name}\n"
@@ -214,7 +212,7 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
             "📎 *Action Required:* Check the attached screenshot below and approve/reject."
         )
         
-        # Admin ko text nahi, seedha screenshot photo ke roop mein caption ke sath instantly jayega
+        # Yeh line aapke text mein se cut gayi thi, jo admin ko photo ke sath saari details bhejegi
         bot.send_photo(ADMIN_ID, photo_file_id, caption=admin_alert_text, parse_mode="Markdown", reply_markup=admin_markup)
     except Exception as e:
         print(f"Forward UTR Error: {e}")
@@ -225,7 +223,8 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
 @bot.callback_query_handler(func=lambda call: call.data.startswith('adm_'))
 def handle_admin_decision(call):
     try:
-        if int(call.from_user.id) != int(ADMIN_ID):
+        if call.from_user.id != ADMIN_ID:
+            bot.answer_callback_query(call.id, "❌ System Protection: Not Authorized!", show_alert=True)
             return
             
         action_parts = call.data.split(':')
@@ -237,17 +236,24 @@ def handle_admin_decision(call):
             prompt_msg_id = int(action_parts[3])
             status_msg_id = int(action_parts[4])
             
-            existing_caption = call.message.caption or ""
-            bot.edit_message_caption(chat_id=int(ADMIN_ID), message_id=call.message.message_id, 
-                                     caption=existing_caption + "\n\n🟢 **Status: Approved & Media Delivered**")
+            bot.answer_callback_query(call.id, "✅ Gateway Action: Payment Approved!")
             
+            # Photo base alert hone ke kaaran caption ko safely modify karega bina crash ke
+            existing_caption = call.message.caption or ""
+            bot.edit_message_caption(chat_id=ADMIN_ID, message_id=call.message.message_id, 
+                                     caption=existing_caption + "\n\n🟢 **Status Panel: Approved & Premium Delivered**")
+            
+            # 🔥 AUTOMATIC DELETE: Accept par click karte hi Prompt wala aur status message delete!
             try:
                 bot.delete_message(chat_id=target_user_id, message_id=prompt_msg_id)
                 bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
             except Exception as del_err:
-                print(f"Deletion failed: {del_err}")
+                print(f"Pre-delivery text deletion failed: {del_err}")
             
+            # 🎯 STYLISH CUSTOM TEXT STATUS:
             custom_msg = bot.send_message(target_user_id, "🎉 *Payment successful!*\n*Media Sending...*", parse_mode="Markdown")
+            
+            # 🚀 Forwarder Engine call karke state tracking message id ko pass kiya
             deliver_media(target_user_id, token, custom_msg.message_id)
             
         elif action == "adm_rej":
@@ -256,17 +262,21 @@ def handle_admin_decision(call):
             prompt_msg_id = int(action_parts[3])
             status_msg_id = int(action_parts[4])
             
-            existing_caption = call.message.caption or ""
-            bot.edit_message_caption(chat_id=int(ADMIN_ID), message_id=call.message.message_id, 
-                                     caption=existing_caption + "\n\n🔴 **Status: Rejected by Admin**")
+            bot.answer_callback_query(call.id, "❌ Gateway Action: Claim Rejected!")
             
+            # Photo base alert hone ke kaaran caption ko safely modify karega bina crash ke
+            existing_caption = call.message.caption or ""
+            bot.edit_message_caption(chat_id=ADMIN_ID, message_id=call.message.message_id, 
+                                     caption=existing_caption + "\n\n🔴 **Status Panel: Rejected by System Admin**")
+            
+            # 🔥 AUTOMATIC DELETE: Reject karne par bhi dono text messages chat se gayab!
             try:
                 bot.delete_message(chat_id=target_user_id, message_id=prompt_msg_id)
                 bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
             except Exception as del_err:
-                print(f"Deletion failed: {del_err}")
+                print(f"Reject mode text deletion failed: {del_err}")
                 
-            bot.send_message(target_user_id, "❌ *Payment status rejected by Admin. Please recheck your screenshot proof and try again.*", parse_mode="Markdown")
+            bot.send_message(target_user_id, "❌ *Verification Failed: Admin has rejected your payment status. Please recheck your screenshot proof and try again.*", parse_mode="Markdown")
             processed_utrs.discard(photo_key)
             
     except Exception as e:
