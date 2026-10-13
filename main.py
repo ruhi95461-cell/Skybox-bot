@@ -131,7 +131,7 @@ def start_payment(message):
         chat_id = message.chat.id
         msg_text = message.text.strip()
         
-        # ✅ FIX: Normal /start dabane par simple text reply bina Markdown ke taaki crash na ho
+        # ✅ FIX 1: Agar user bina token ke sirf /start bhejta hai toh handle karega bina crash huye
         if msg_text == "/start" or len(msg_text.split()) < 2:
             bot.reply_to(message, "👋 Welcome! Please click a valid product checkout link to start.")
             return
@@ -142,7 +142,6 @@ def start_payment(message):
             exact_amount = saved_links[token]["amount"]
             qr_img = generate_upi_qr(UPI_ID, exact_amount)
             
-            # Markdown se mukt safe checkout text format
             caption_text = (
                 "⚡ SKYBOX PREMIUM CHECKOUT ⚡\n\n"
                 f"💰 Pay Amount: ₹{exact_amount}\n"
@@ -152,8 +151,8 @@ def start_payment(message):
                 "2️⃣ Click below to upload your payment screenshot image."
             )
             
-            markup = types.InlineKeyboardMarkup()
-            submit_btn = types.InlineKeyboardButton("📤 Upload Payment Screenshot", callback_data=f"sub_utr:{token}:{exact_amount}")
+            markup = InlineKeyboardMarkup()
+            submit_btn = InlineKeyboardButton("📤 Upload Payment Screenshot", callback_data=f"sub_utr:{token}:{exact_amount}")
             markup.add(submit_btn)
             
             bot.send_photo(chat_id, qr_img, caption=caption_text, reply_markup=markup)
@@ -201,9 +200,9 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
         status_msg = bot.send_message(chat_id, "⌛ Verifying your payment. Please wait patiently...")
         status_msg_id = status_msg.message_id
         
-        admin_markup = types.InlineKeyboardMarkup()
-        approve_btn = types.InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app:{chat_id}:{token}:{prompt_msg_id}:{status_msg_id}")
-        reject_btn = types.InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:{photo_file_id}:{prompt_msg_id}:{status_msg_id}")
+        admin_markup = InlineKeyboardMarkup()
+        approve_btn = InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app:{chat_id}:{token}:{prompt_msg_id}:{status_msg_id}")
+        reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:{photo_file_id}:{prompt_msg_id}:{status_msg_id}")
         admin_markup.row(approve_btn, reject_btn)
         
         admin_alert_text = (
@@ -216,6 +215,7 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
             "📎 Action: Verify the photo below and manual approve/reject."
         )
         
+        # ✅ FIX 2: int() casting ki wajah se agar aap khud Admin ID se screenshot bhejenge, toh bhi admin alert 100% aayega
         bot.send_photo(int(ADMIN_ID), photo_file_id, caption=admin_alert_text, reply_markup=admin_markup)
         print("DEBUG: Admin Alert pushed successfully.")
     except Exception as e:
@@ -233,7 +233,7 @@ def handle_admin_decision(call):
         except Exception:
             pass
 
-        # 🔧 ADMIN SELF-TEST FIX: int() casting ki wajah se ab aap apni Admin ID se bhi test kar payenge
+        # 🔧 ADMIN SELF-TEST FIX: int() casting dono taraf lagayi hai taaki aap apni hi ID se screenshot bhejkar test kar sakein
         if int(call.from_user.id) != int(ADMIN_ID):
             try:
                 bot.answer_callback_query(call.id, "❌ Protected: Not Authorized!", show_alert=True)
