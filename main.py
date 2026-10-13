@@ -199,7 +199,7 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
         
         admin_markup = InlineKeyboardMarkup()
         approve_btn = InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app:{chat_id}:{token}:{prompt_msg_id}:{status_msg_id}")
-        reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:{photo_file_id}:{prompt_msg_id}:{status_msg_id}")
+        reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:skip:{prompt_msg_id}:{status_msg_id}")
         admin_markup.row(approve_btn, reject_btn)
         
         admin_alert_text = (
@@ -236,40 +236,32 @@ def handle_admin_decision(call):
             prompt_msg_id = int(action_parts[3])
             status_msg_id = int(action_parts[4])
             
-            bot.answer_callback_query(call.id, "✅ Gateway Action: Payment Approved!")
+            bot.answer_callback_query(call.id, "Gateway Action: Payment Approved!")
             
-            # Photo base alert hone ke kaaran caption ko safely modify karega bina crash ke
             existing_caption = call.message.caption or ""
             bot.edit_message_caption(chat_id=ADMIN_ID, message_id=call.message.message_id, 
                                      caption=existing_caption + "\n\n🟢 **Status Panel: Approved & Premium Delivered**")
             
-            # 🔥 AUTOMATIC DELETE: Accept par click karte hi Prompt wala aur status message delete!
             try:
                 bot.delete_message(chat_id=target_user_id, message_id=prompt_msg_id)
                 bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
             except Exception as del_err:
                 print(f"Pre-delivery text deletion failed: {del_err}")
             
-            # 🎯 STYLISH CUSTOM TEXT STATUS:
             custom_msg = bot.send_message(target_user_id, "🎉 *Payment successful!*\n*Media Sending...*", parse_mode="Markdown")
-            
-            # 🚀 Forwarder Engine call karke state tracking message id ko pass kiya
             deliver_media(target_user_id, token, custom_msg.message_id)
             
         elif action == "adm_rej":
             target_user_id = int(action_parts[1])
-            photo_key = action_parts[2]
-            prompt_msg_id = int(action_parts[3])
-            status_msg_id = int(action_parts[4])
+            prompt_msg_id = int(action_parts[2])
+            status_msg_id = int(action_parts[3])
             
             bot.answer_callback_query(call.id, "❌ Gateway Action: Claim Rejected!")
             
-            # Photo base alert hone ke kaaran caption ko safely modify karega bina crash ke
             existing_caption = call.message.caption or ""
             bot.edit_message_caption(chat_id=ADMIN_ID, message_id=call.message.message_id, 
                                      caption=existing_caption + "\n\n🔴 **Status Panel: Rejected by System Admin**")
             
-            # 🔥 AUTOMATIC DELETE: Reject karne par bhi dono text messages chat se gayab!
             try:
                 bot.delete_message(chat_id=target_user_id, message_id=prompt_msg_id)
                 bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
@@ -277,7 +269,6 @@ def handle_admin_decision(call):
                 print(f"Reject mode text deletion failed: {del_err}")
                 
             bot.send_message(target_user_id, "❌ *Verification Failed: Admin has rejected your payment status. Please recheck your screenshot proof and try again.*", parse_mode="Markdown")
-            processed_utrs.discard(photo_key)
             
     except Exception as e:
         print(f"Callback Error: {e}")
