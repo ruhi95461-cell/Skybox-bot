@@ -122,7 +122,7 @@ def generate_link(message):
     bot.reply_to(message, structure_text, parse_mode="Markdown")
 
 # =====================================================================
-# 📦 STEP 5: USER CHECKOUT & IMAGE PIPELINE (EXPLICIT DATA SYNC)
+# 📦 STEP 5: USER CHECKOUT & IMAGE FLOW PIPELINE (FORWARDING CORE TRACKING)
 # =====================================================================
 
 @bot.message_handler(commands=['start'])
@@ -132,10 +132,9 @@ def start_payment(message):
         msg_text = message.text.strip()
         
         if msg_text == "/start" or len(msg_text.split()) < 2:
-            bot.reply_to(message, "👋 Welcome! Please click a valid product checkout link to start.")
+            bot.reply_to(message, "👋 *Welcome to SkyBox Premium Portal!*\n\n*Kindly click on a valid product checkout link to unlock your premium contents immediately.*", parse_mode="Markdown")
             return
             
-        # ✅ ABSOLUTE FIX: Pehle text split kiya, index 1 se token uthaya, fir use .strip() kiya
         token = msg_text.split()[1].strip()
         
         if token in saved_links:
@@ -143,21 +142,23 @@ def start_payment(message):
             qr_img = generate_upi_qr(UPI_ID, exact_amount)
             
             caption_text = (
-                "⚡ SKYBOX PREMIUM CHECKOUT ⚡\n\n"
-                f"💰 Pay Amount: ₹{exact_amount}\n"
-                f"📌 UPI ID: {UPI_ID}\n\n"
-                "💎 INSTRUCTIONS:\n"
-                f"1️⃣ Pay exact ₹{exact_amount} via QR or UPI ID.\n"
-                "2️⃣ Click below to upload your payment screenshot image."
+                "⚡ *SKYBOX PREMIUM CHECKOUT* ⚡\n\n"
+                f"💰 *Pay Exact Amount:* `₹{exact_amount}`\n"
+                f"📌 *Official UPI ID:* `{UPI_ID}`\n\n"
+                "💎 *INSTRUCTIONS:*\n"
+                "1️⃣ *Scan the QR code above or copy the official UPI ID.*\n"
+                f"2️⃣ *Pay the exact amount of* `₹{exact_amount}` *carefully.*\n"
+                "3️⃣ *After successful payment, click the button below to upload your transaction screenshot.*"
             )
             
             markup = InlineKeyboardMarkup()
+            # Inline button text badal kar screenshot submit karne ke liye kiya
             submit_btn = InlineKeyboardButton("📤 Upload Payment Screenshot", callback_data=f"sub_utr:{token}:{exact_amount}")
             markup.add(submit_btn)
             
-            bot.send_photo(chat_id, qr_img, caption=caption_text, reply_markup=markup)
+            bot.send_photo(chat_id, qr_img, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
         else:
-            bot.reply_to(message, "❌ Error: Invalid or expired checkout link!")
+            bot.reply_to(message, "❌ *System Alert: The checkout link you used is either invalid or has expired!*", parse_mode="Markdown")
     except Exception as e:
         print(f"Start Error: {e}")
 
@@ -166,45 +167,38 @@ def ask_for_utr(call):
     try:
         chat_id = call.message.chat.id
         data_parts = call.data.split(':')
-        
-        # ✅ FIXED: Correct list index extracted safely
         token = data_parts[1]
         amount = data_parts[2]
         
         bot.answer_callback_query(call.id)
         
-        prompt_msg = bot.send_message(
-            chat_id, 
-            "📸 PAYMENT VERIFICATION\n\n👉 Please upload and send your successful transaction screenshot receipt now."
-        )
-        
-        # ✅ FIXED: Lambda capture block handles accurate local parameters tracking
-        bot.register_next_step_handler(
-            prompt_msg, 
-            lambda msg, t=token, a=amount, p_id=prompt_msg.message_id: forward_screenshot_to_admin(msg, t, a, p_id)
-        )
+        # 🎯 TRACKING 1: Prompt message text badalkar image upload karne ke liye kiya aur ID track rakhi
+        prompt_msg = bot.send_message(chat_id, "📸 *PAYMENT VERIFICATION*\n\n*Please upload and send your successful transaction screenshot receipt now as a photo reply here:*", parse_mode="Markdown")
+        bot.register_next_step_handler(prompt_msg, forward_utr_to_admin, token, amount, prompt_msg.message_id)
     except Exception as e:
         print(f"Ask UTR Callback Error: {e}")
 
-def forward_screenshot_to_admin(message, token, amount, prompt_msg_id):
+def forward_utr_to_admin(message, token, amount, prompt_msg_id):
     try:
         chat_id = message.chat.id
-        user_name = message.from_user.first_name or "Premium Customer"
-        user_username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
+        user_name = message.from_user.first_name or "Premium User"
         
+        # 📸 VALIDATION: Text ki jagah user se photo file manga ja raha hai
         if not message.photo:
-            bot.reply_to(message, "❌ Error: Please upload an actual photo screenshot file only!")
+            bot.reply_to(message, "❌ *Input Error: Please upload an actual photo screenshot file only! Click checkout to retry.*", parse_mode="Markdown")
             return
 
+        # Photo ki high-resolution file ID extract ki
         photo_file_id = message.photo[-1].file_id
 
         if photo_file_id in processed_utrs:
-            bot.send_message(chat_id, "⚠️ Alert: This receipt is already processing! Please wait.")
+            bot.send_message(chat_id, "⚠️ *Security Alert: This payment claim is already under active verification! Please wait patiently.*", parse_mode="Markdown")
             return
 
         processed_utrs.add(photo_file_id)
         
-        status_msg = bot.send_message(chat_id, "⌛ Verifying your payment. Please wait patiently...")
+        # 🎯 TRACKING 2: Checking status message ki ID save ki
+        status_msg = bot.send_message(chat_id, "⌛ *Status Alert: Your payment verification screenshot is being processed by the admin. Please hold...*", parse_mode="Markdown")
         status_msg_id = status_msg.message_id
         
         admin_markup = InlineKeyboardMarkup()
@@ -212,19 +206,18 @@ def forward_screenshot_to_admin(message, token, amount, prompt_msg_id):
         reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:{photo_file_id}:{prompt_msg_id}:{status_msg_id}")
         admin_markup.row(approve_btn, reject_btn)
         
+        # Safe raw format text bina kisi parse bug ke
         admin_alert_text = (
-            "🔔 NEW VERIFICATION REQUEST! 🔔\n\n"
-            f"👤 Customer Name: {user_name}\n"
-            f"🆔 User Chat ID: {chat_id}\n"
-            f"🌐 Telegram Username: {user_username}\n"
-            f"💰 Expected Amount: ₹{amount}\n"
-            f"📦 Link Token ID: {token}\n\n"
-            "📎 Action: Verify the photo below and manual approve/reject."
+            "🔔 *System Alert: New Manual Verification Request!* 🔔\n\n"
+            f"👤 *Premium Customer:* {user_name} (`{chat_id}`)\n"
+            f"💰 *Expected Amount:* ₹{amount}\n"
+            f"📦 *Link Token Access:* {token}\n\n"
+            "📎 *Action Required:* Verify the photo below and manual approve/reject."
         )
         
-        # Admin validation triggers image pipeline instantly
+        # ✅ FIX: Explicit integer typecasting lagayi hai taaki jab aap khud Admin se message karein toh message drop na ho
         bot.send_photo(int(ADMIN_ID), photo_file_id, caption=admin_alert_text, reply_markup=admin_markup)
-        print("DEBUG: Admin Alert pushed successfully.")
+        print("DEBUG: Admin Alert photo pushed successfully.")
     except Exception as e:
         print(f"Forward UTR Error: {e}")
 
