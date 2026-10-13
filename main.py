@@ -229,8 +229,18 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
 @bot.callback_query_handler(func=lambda call: call.data.startswith('adm_'))
 def handle_admin_decision(call):
     try:
-        if call.from_user.id != ADMIN_ID:
-            bot.answer_callback_query(call.id, "❌ Protected: Not Authorized!", show_alert=True)
+        # ⚡ INSTANT FIX: Click hote hi sabse pehle Telegram ko reply dena hai taaki NOT RESPONDING error kabhi na aaye
+        try:
+            bot.answer_callback_query(call.id)
+        except Exception:
+            pass
+
+        # 🔧 ADMIN SELF-TEST FIX: int() casting dono taraf lagayi hai taaki aap apni hi ID se screenshot bhejkar test kar sakein
+        if int(call.from_user.id) != int(ADMIN_ID):
+            try:
+                bot.answer_callback_query(call.id, "❌ Protected: Not Authorized!", show_alert=True)
+            except Exception:
+                pass
             return
             
         action_parts = call.data.split(':')
@@ -242,11 +252,11 @@ def handle_admin_decision(call):
             prompt_msg_id = int(action_parts[3])
             status_msg_id = int(action_parts[4])
             
-            bot.answer_callback_query(call.id, "✅ Approved!")
+            # Caption update sequence instantly triggered
             bot.edit_message_caption(chat_id=ADMIN_ID, message_id=call.message.message_id, 
                                      caption=call.message.caption + "\n\n🟢 **Status: Approved & Media Delivered**")
             
-            # 🔥 AUTOMATIC CLEANUP: User text logs deleted completely
+            # 🔥 AUTOMATIC CLEANUP: User text logs deleted completely (Aapka original logic)
             try:
                 bot.delete_message(chat_id=target_user_id, message_id=prompt_msg_id)
                 bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
@@ -263,7 +273,6 @@ def handle_admin_decision(call):
             prompt_msg_id = int(action_parts[3])
             status_msg_id = int(action_parts[4])
             
-            bot.answer_callback_query(call.id, "❌ Rejected!")
             bot.edit_message_caption(chat_id=ADMIN_ID, message_id=call.message.message_id, 
                                      caption=call.message.caption + "\n\n🔴 **Status: Rejected by Admin**")
             
