@@ -152,7 +152,6 @@ def start_payment(message):
             )
             
             markup = InlineKeyboardMarkup()
-            # Inline button text badal kar screenshot submit karne ke liye kiya
             submit_btn = InlineKeyboardButton("📤 Upload Payment Screenshot", callback_data=f"sub_utr:{token}:{exact_amount}")
             markup.add(submit_btn)
             
@@ -172,7 +171,6 @@ def ask_for_utr(call):
         
         bot.answer_callback_query(call.id)
         
-        # 🎯 TRACKING 1: Prompt message text badalkar image upload karne ke liye kiya aur ID track rakhi
         prompt_msg = bot.send_message(chat_id, "📸 *PAYMENT VERIFICATION*\n\n*Please upload and send your successful transaction screenshot receipt now as a photo reply here:*", parse_mode="Markdown")
         bot.register_next_step_handler(prompt_msg, forward_utr_to_admin, token, amount, prompt_msg.message_id)
     except Exception as e:
@@ -183,12 +181,11 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
         chat_id = message.chat.id
         user_name = message.from_user.first_name or "Premium User"
         
-        # 📸 VALIDATION: Text ki jagah user se photo file manga ja raha hai
+        # Sirf check karega ki input photo hai ya nahi
         if not message.photo:
             bot.reply_to(message, "❌ *Input Error: Please upload an actual photo screenshot file only! Click checkout to retry.*", parse_mode="Markdown")
             return
 
-        # Photo ki high-resolution file ID extract ki
         photo_file_id = message.photo[-1].file_id
 
         if photo_file_id in processed_utrs:
@@ -197,25 +194,25 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
 
         processed_utrs.add(photo_file_id)
         
-        # 🎯 TRACKING 2: Checking status message ki ID save ki
         status_msg = bot.send_message(chat_id, "⌛ *Status Alert: Your payment verification screenshot is being processed by the admin. Please hold...*", parse_mode="Markdown")
         status_msg_id = status_msg.message_id
         
         admin_markup = InlineKeyboardMarkup()
+        # Callback data se 'photo_file_id' ko handle karne ke liye sequence set kiya
         approve_btn = InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app:{chat_id}:{token}:{prompt_msg_id}:{status_msg_id}")
         reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:{photo_file_id}:{prompt_msg_id}:{status_msg_id}")
         admin_markup.row(approve_btn, reject_btn)
         
-        # Safe raw format text bina kisi parse bug ke
         admin_alert_text = (
             "🔔 *System Alert: New Manual Verification Request!* 🔔\n\n"
             f"👤 *Premium Customer:* {user_name} (`{chat_id}`)\n"
             f"💰 *Expected Amount:* ₹{amount}\n"
             f"📦 *Link Token Access:* {token}\n\n"
-            "📎 *Action Required:* Verify the photo below and manual approve/reject."
+            "📎 *Action Required:* Check the attached screenshot below and take action."
         )
         
-        bot.send_message(ADMIN_ID, admin_alert_text, parse_mode="Markdown", reply_markup=admin_markup)
+        # Admin ko text ki jagah direct screenshot photo ke roop mein bhejega button inline karke
+        bot.send_photo(ADMIN_ID, photo_file_id, caption=admin_alert_text, parse_mode="Markdown", reply_markup=admin_markup)
     except Exception as e:
         print(f"Forward UTR Error: {e}")
 
@@ -225,13 +222,13 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
 @bot.callback_query_handler(func=lambda call: call.data.startswith('adm_'))
 def handle_admin_decision(call):
     try:
-        # ⚡ INSTANT FIX: Click hote hi sabse pehle Telegram ko response dena hai taaki NOT RESPONDING error na aaye
+        # ⚡ INSTANT FIX: Response dena taaki 'Not Responding' lag na aaye
         try:
             bot.answer_callback_query(call.id)
         except Exception:
             pass
 
-        # 🔧 ADMIN SELF-TEST FIX: int() casting dono taraf lagayi hai taaki aap apni hi ID se screenshot bhejkar test kar sakein
+        # 🔧 ADMIN SECURITY CHECK: Admin ID validation
         if int(call.from_user.id) != int(ADMIN_ID):
             try:
                 bot.answer_callback_query(call.id, "❌ Protected: Not Authorized!", show_alert=True)
@@ -248,11 +245,12 @@ def handle_admin_decision(call):
             prompt_msg_id = int(action_parts[3])
             status_msg_id = int(action_parts[4])
             
-            # Admin panel ka caption instantly badlein
+            # Admin ke paas photo gayi hai, isliye caption edit hoga
+            existing_caption = call.message.caption or ""
             bot.edit_message_caption(chat_id=int(ADMIN_ID), message_id=call.message.message_id, 
-                                     caption=call.message.caption + "\n\n🟢 **Status: Approved & Media Delivered**")
+                                     caption=existing_caption + "\n\n🟢 **Status: Approved & Media Delivered**")
             
-            # 🔥 AUTOMATIC CLEANUP: User text logs ko delete karna (Aapka original feature)
+            # 🧹 USER CHAT CLEANUP: Status aur alert messages delete karna
             try:
                 bot.delete_message(chat_id=target_user_id, message_id=prompt_msg_id)
                 bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
@@ -260,7 +258,6 @@ def handle_admin_decision(call):
                 print(f"Deletion failed: {del_err}")
             
             custom_msg = bot.send_message(target_user_id, "🎉 *Payment successful!*\n*Media Sending...*", parse_mode="Markdown")
-            
             deliver_media(target_user_id, token, custom_msg.message_id)
             
         elif action == "adm_rej":
@@ -269,9 +266,10 @@ def handle_admin_decision(call):
             prompt_msg_id = int(action_parts[3])
             status_msg_id = int(action_parts[4])
             
-            # Admin panel ka caption instantly badlein
+            # Admin panel photo caption update for rejection
+            existing_caption = call.message.caption or ""
             bot.edit_message_caption(chat_id=int(ADMIN_ID), message_id=call.message.message_id, 
-                                     caption=call.message.caption + "\n\n🔴 **Status: Rejected by Admin**")
+                                     caption=existing_caption + "\n\n🔴 **Status: Rejected by Admin**")
             
             try:
                 bot.delete_message(chat_id=target_user_id, message_id=prompt_msg_id)
