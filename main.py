@@ -135,7 +135,6 @@ def start_payment(message):
             bot.reply_to(message, "👋 *Welcome! Please click a valid product checkout link to start.*", parse_mode="Markdown")
             return
             
-        # ✅ FIX: Sahi se token nikalne ke liye split ka index use kiya aur strip lagaya
         token = msg_text.split()[1].strip()
         
         if token in saved_links:
@@ -151,8 +150,8 @@ def start_payment(message):
                 "2️⃣ *Click below to upload your payment screenshot image.*"
             )
             
-            markup = InlineKeyboardMarkup()
-            submit_btn = InlineKeyboardButton("📤 Upload Payment Screenshot", callback_data=f"sub_utr:{token}:{exact_amount}")
+            markup = types.InlineKeyboardMarkup()
+            submit_btn = types.InlineKeyboardButton("📤 Upload Payment Screenshot", callback_data=f"sub_utr:{token}:{exact_amount}")
             markup.add(submit_btn)
             
             bot.send_photo(chat_id, qr_img, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
@@ -166,8 +165,6 @@ def ask_for_utr(call):
     try:
         chat_id = call.message.chat.id
         data_parts = call.data.split(':')
-        
-        # ✅ FIX: Indexes ko explicitly wapas restore kiya taaki crash na ho
         token = data_parts[1]
         amount = data_parts[2]
         
@@ -204,24 +201,25 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
         status_msg = bot.send_message(chat_id, "⌛ *Verifying your payment. Please wait patiently...*", parse_mode="Markdown")
         status_msg_id = status_msg.message_id
         
-        admin_markup = InlineKeyboardMarkup()
-        # ✅ FIX: Proper string formatting callback data ke liye
-        approve_btn = InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app:{chat_id}:{token}:{prompt_msg_id}:{status_msg_id}")
-        reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:{photo_file_id}:{prompt_msg_id}:{status_msg_id}")
+        # ✅ FIXED: types.InlineKeyboardMarkup aur types.InlineKeyboardButton lagaya
+        admin_markup = types.InlineKeyboardMarkup()
+        approve_btn = types.InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app:{chat_id}:{token}:{prompt_msg_id}:{status_msg_id}")
+        reject_btn = types.InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:{photo_file_id}:{prompt_msg_id}:{status_msg_id}")
         admin_markup.row(approve_btn, reject_btn)
         
+        # ✅ FIXED: Markdown issues ko safe kiya taaki username/token ke underscore (_) se alert message crash na ho
         admin_alert_text = (
-            "🔔 *NEW VERIFICATION REQUEST!* 🔔\n\n"
-            f"👤 *Customer Name:* *{user_name}*\n"
-            f"🆔 *User Chat ID:* `{chat_id}`\n"
-            f"🌐 *Telegram Username:* {user_username}\n"
-            f"💰 *Expected Amount:* `₹{amount}`\n"
-            f"📦 *Link Token ID:* `{token}`\n\n"
-            "📎 *Action:* Verify the photo below and manual approve/reject."
+            "🔔 NEW VERIFICATION REQUEST! 🔔\n\n"
+            f"👤 Customer Name: {user_name}\n"
+            f"🆔 User Chat ID: {chat_id}\n"
+            f"🌐 Telegram Username: {user_username}\n"
+            f"💰 Expected Amount: ₹{amount}\n"
+            f"📦 Link Token ID: {token}\n\n"
+            "📎 Action: Verify the photo below and manual approve/reject."
         )
         
-        # Yahan ADMIN_ID string format se int casting automatic handle ho jayega
-        bot.send_photo(int(ADMIN_ID), photo_file_id, caption=admin_alert_text, parse_mode="Markdown", reply_markup=admin_markup)
+        # Admin ID ko securely integer mein badal kar send photo pipeline call kiya
+        bot.send_photo(int(ADMIN_ID), photo_file_id, caption=admin_alert_text, reply_markup=admin_markup)
         print("DEBUG: Admin Alert pushed successfully.")
     except Exception as e:
         print(f"Forward UTR Error: {e}")
