@@ -122,7 +122,7 @@ def generate_link(message):
     bot.reply_to(message, structure_text, parse_mode="Markdown")
 
 # =====================================================================
-# 📦 STEP 5: USER CHECKOUT & IMAGE PIPELINE (SHORT PREMIUM CORE)
+# 📦 STEP 5: USER CHECKOUT & IMAGE PIPELINE (ADMIN ALERT PROTOCOL FIXED)
 # =====================================================================
 
 @bot.message_handler(commands=['start'])
@@ -170,14 +170,14 @@ def ask_for_utr(call):
         
         bot.answer_callback_query(call.id)
         
-        # 🎉 SHORT TEXT: Clean compact payment instructions
         prompt_msg = bot.send_message(
             chat_id, 
             "📸 *PAYMENT VERIFICATION*\n\n"
             "👉 *Please upload and send your successful transaction screenshot receipt now.*", 
             parse_mode="Markdown"
         )
-        bot.register_next_step_handler(prompt_msg, forward_utr_to_admin, token, amount, prompt_msg.message_id)
+        # Pass parameters safely inside registration engine
+        bot.register_next_step_handler(prompt_msg, lambda msg: forward_utr_to_admin(msg, token, amount, prompt_msg.message_id))
     except Exception as e:
         print(f"Ask UTR Callback Error: {e}")
 
@@ -199,17 +199,15 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
 
         processed_utrs.add(photo_file_id)
         
-        # 🎉 SHORT TEXT: Short clear customer loading text
         status_msg = bot.send_message(chat_id, "⌛ *Verifying your payment. Please wait patiently...*", parse_mode="Markdown")
         status_msg_id = status_msg.message_id
         
         admin_markup = InlineKeyboardMarkup()
-        # Cleaned safe index serialization strings
+        # Compact index arrays for robust webhook processing
         approve_btn = InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app:{chat_id}:{token}:{prompt_msg_id}:{status_msg_id}")
         reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:{prompt_msg_id}:{status_msg_id}")
         admin_markup.row(approve_btn, reject_btn)
         
-        # 👑 PREMIUM ADMIN MONITOR SYSTEM: Shows Name, Chat ID, Username and the real photo proof
         admin_alert_text = (
             "🔔 *NEW VERIFICATION REQUEST!* 🔔\n\n"
             f"👤 *Customer Name:* *{user_name}*\n"
@@ -220,7 +218,9 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
             "📎 *Action:* Verify the photo below and manual approve/reject."
         )
         
+        # Explicitly triggers the transmission layout to Admin panel
         bot.send_photo(ADMIN_ID, photo_file_id, caption=admin_alert_text, parse_mode="Markdown", reply_markup=admin_markup)
+        print("DEBUG: Admin Alert sent successfully.")
     except Exception as e:
         print(f"Forward UTR Error: {e}")
 
@@ -235,13 +235,13 @@ def handle_admin_decision(call):
             return
             
         action_parts = call.data.split(':')
-        action = action_parts[0]
+        action = action_parts[1]
         
         if action == "adm_app":
-            target_user_id = int(action_parts[1])
-            token = action_parts[2]
-            prompt_msg_id = int(action_parts[3])
-            status_msg_id = int(action_parts[4])
+            target_user_id = int(action_parts[2])
+            token = action_parts[3]
+            prompt_msg_id = int(action_parts[4])
+            status_msg_id = int(action_parts[5])
             
             bot.answer_callback_query(call.id, "✅ Approved!")
             bot.edit_message_caption(chat_id=ADMIN_ID, message_id=call.message.message_id, 
@@ -258,9 +258,9 @@ def handle_admin_decision(call):
             deliver_media(target_user_id, token, custom_msg.message_id)
             
         elif action == "adm_rej":
-            target_user_id = int(action_parts[1])
-            prompt_msg_id = int(action_parts[2])
-            status_msg_id = int(action_parts[3])
+            target_user_id = int(action_parts[2])
+            prompt_msg_id = int(action_parts[3])
+            status_msg_id = int(action_parts[4])
             
             bot.answer_callback_query(call.id, "❌ Rejected!")
             bot.edit_message_caption(chat_id=ADMIN_ID, message_id=call.message.message_id, 
