@@ -131,8 +131,9 @@ def start_payment(message):
         chat_id = message.chat.id
         msg_text = message.text.strip()
         
+        # ✅ FIX: Normal /start dabane par simple text reply bina Markdown ke taaki crash na ho
         if msg_text == "/start" or len(msg_text.split()) < 2:
-            bot.reply_to(message, "👋 *Welcome! Please click a valid product checkout link to start.*", parse_mode="Markdown")
+            bot.reply_to(message, "👋 Welcome! Please click a valid product checkout link to start.")
             return
             
         token = msg_text.split()[1].strip()
@@ -141,22 +142,23 @@ def start_payment(message):
             exact_amount = saved_links[token]["amount"]
             qr_img = generate_upi_qr(UPI_ID, exact_amount)
             
+            # Markdown se mukt safe checkout text format
             caption_text = (
-                "⚡ *SKYBOX PREMIUM CHECKOUT* ⚡\n\n"
-                f"💰 *Pay Amount:* `₹{exact_amount}`\n"
-                f"📌 *UPI ID:* `{UPI_ID}`\n\n"
-                "💎 *INSTRUCTIONS:*\n"
-                f"1️⃣ *Pay exact* `₹{exact_amount}` *via QR or UPI ID.*\n"
-                "2️⃣ *Click below to upload your payment screenshot image.*"
+                "⚡ SKYBOX PREMIUM CHECKOUT ⚡\n\n"
+                f"💰 Pay Amount: ₹{exact_amount}\n"
+                f"📌 UPI ID: {UPI_ID}\n\n"
+                "💎 INSTRUCTIONS:\n"
+                f"1️⃣ Pay exact ₹{exact_amount} via QR or UPI ID.\n"
+                "2️⃣ Click below to upload your payment screenshot image."
             )
             
             markup = types.InlineKeyboardMarkup()
             submit_btn = types.InlineKeyboardButton("📤 Upload Payment Screenshot", callback_data=f"sub_utr:{token}:{exact_amount}")
             markup.add(submit_btn)
             
-            bot.send_photo(chat_id, qr_img, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
+            bot.send_photo(chat_id, qr_img, caption=caption_text, reply_markup=markup)
         else:
-            bot.reply_to(message, "❌ *Error: Invalid or expired checkout link!*", parse_mode="Markdown")
+            bot.reply_to(message, "❌ Error: Invalid or expired checkout link!")
     except Exception as e:
         print(f"Start Error: {e}")
 
@@ -172,9 +174,7 @@ def ask_for_utr(call):
         
         prompt_msg = bot.send_message(
             chat_id, 
-            "📸 *PAYMENT VERIFICATION*\n\n"
-            "👉 *Please upload and send your successful transaction screenshot receipt now.*", 
-            parse_mode="Markdown"
+            "📸 PAYMENT VERIFICATION\n\n👉 Please upload and send your successful transaction screenshot receipt now."
         )
         bot.register_next_step_handler(prompt_msg, lambda msg: forward_utr_to_admin(msg, token, amount, prompt_msg.message_id))
     except Exception as e:
@@ -187,27 +187,25 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
         user_username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
         
         if not message.photo:
-            bot.reply_to(message, "❌ *Error: Please upload an actual photo screenshot file only!*", parse_mode="Markdown")
+            bot.reply_to(message, "❌ Error: Please upload an actual photo screenshot file only!")
             return
 
         photo_file_id = message.photo[-1].file_id
 
         if photo_file_id in processed_utrs:
-            bot.send_message(chat_id, "⚠️ *Alert: This receipt is already processing! Please wait.*", parse_mode="Markdown")
+            bot.send_message(chat_id, "⚠️ Alert: This receipt is already processing! Please wait.")
             return
 
         processed_utrs.add(photo_file_id)
         
-        status_msg = bot.send_message(chat_id, "⌛ *Verifying your payment. Please wait patiently...*", parse_mode="Markdown")
+        status_msg = bot.send_message(chat_id, "⌛ Verifying your payment. Please wait patiently...")
         status_msg_id = status_msg.message_id
         
-        # ✅ FIXED: types.InlineKeyboardMarkup aur types.InlineKeyboardButton lagaya
         admin_markup = types.InlineKeyboardMarkup()
         approve_btn = types.InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app:{chat_id}:{token}:{prompt_msg_id}:{status_msg_id}")
         reject_btn = types.InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:{photo_file_id}:{prompt_msg_id}:{status_msg_id}")
         admin_markup.row(approve_btn, reject_btn)
         
-        # ✅ FIXED: Markdown issues ko safe kiya taaki username/token ke underscore (_) se alert message crash na ho
         admin_alert_text = (
             "🔔 NEW VERIFICATION REQUEST! 🔔\n\n"
             f"👤 Customer Name: {user_name}\n"
@@ -218,7 +216,6 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
             "📎 Action: Verify the photo below and manual approve/reject."
         )
         
-        # Admin ID ko securely integer mein badal kar send photo pipeline call kiya
         bot.send_photo(int(ADMIN_ID), photo_file_id, caption=admin_alert_text, reply_markup=admin_markup)
         print("DEBUG: Admin Alert pushed successfully.")
     except Exception as e:
