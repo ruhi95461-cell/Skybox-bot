@@ -131,7 +131,7 @@ def start_payment(message):
         chat_id = message.chat.id
         msg_text = message.text.strip()
         
-        # ✅ FIX 1: Agar user bina token ke sirf /start bhejta hai toh handle karega bina crash huye
+        # ✅ Handle normal /start safely without crash
         if msg_text == "/start" or len(msg_text.split()) < 2:
             bot.reply_to(message, "👋 Welcome! Please click a valid product checkout link to start.")
             return
@@ -175,7 +175,12 @@ def ask_for_utr(call):
             chat_id, 
             "📸 PAYMENT VERIFICATION\n\n👉 Please upload and send your successful transaction screenshot receipt now."
         )
-        bot.register_next_step_handler(prompt_msg, lambda msg: forward_utr_to_admin(msg, token, amount, prompt_msg.message_id))
+        
+        # ✅ FIXED: Explicit variable binding inside lambda to ensure correct parameter delivery
+        bot.register_next_step_handler(
+            prompt_msg, 
+            lambda msg, t=token, a=amount, p_id=prompt_msg.message_id: forward_utr_to_admin(msg, t, a, p_id)
+        )
     except Exception as e:
         print(f"Ask UTR Callback Error: {e}")
 
@@ -215,7 +220,7 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
             "📎 Action: Verify the photo below and manual approve/reject."
         )
         
-        # ✅ FIX 2: int() casting ki wajah se agar aap khud Admin ID se screenshot bhejenge, toh bhi admin alert 100% aayega
+        # Secure casting dynamically updates internal integer types
         bot.send_photo(int(ADMIN_ID), photo_file_id, caption=admin_alert_text, reply_markup=admin_markup)
         print("DEBUG: Admin Alert pushed successfully.")
     except Exception as e:
