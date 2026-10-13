@@ -180,8 +180,9 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
     try:
         chat_id = message.chat.id
         user_name = message.from_user.first_name or "Premium User"
+        user_username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
         
-        # Sirf check karega ki input photo hai ya nahi
+        # User ko screenshot bhejna hi hoga
         if not message.photo:
             bot.reply_to(message, "❌ *Input Error: Please upload an actual photo screenshot file only! Click checkout to retry.*", parse_mode="Markdown")
             return
@@ -198,20 +199,22 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
         status_msg_id = status_msg.message_id
         
         admin_markup = InlineKeyboardMarkup()
-        # Callback data se 'photo_file_id' ko handle karne ke liye sequence set kiya
         approve_btn = InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app:{chat_id}:{token}:{prompt_msg_id}:{status_msg_id}")
         reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:{photo_file_id}:{prompt_msg_id}:{status_msg_id}")
         admin_markup.row(approve_btn, reject_btn)
         
+        # Admin ke liye details jo aapne maangi thi (ID, Username, Amount aur Token)
         admin_alert_text = (
-            "🔔 *System Alert: New Manual Verification Request!* 🔔\n\n"
-            f"👤 *Premium Customer:* {user_name} (`{chat_id}`)\n"
+            "🔔 *System Alert: New Payment Request!* 🔔\n\n"
+            f"👤 *Customer Name:* {user_name}\n"
+            f"🆔 *User ID:* `{chat_id}`\n"
+            f"🏷️ *Username:* {user_username}\n"
             f"💰 *Expected Amount:* ₹{amount}\n"
             f"📦 *Link Token Access:* {token}\n\n"
-            "📎 *Action Required:* Check the attached screenshot below and take action."
+            "📎 *Action Required:* Check the attached screenshot below and approve/reject."
         )
         
-        # Admin ko text ki jagah direct screenshot photo ke roop mein bhejega button inline karke
+        # Admin ko text nahi, seedha screenshot photo ke roop mein caption ke sath instantly jayega
         bot.send_photo(ADMIN_ID, photo_file_id, caption=admin_alert_text, parse_mode="Markdown", reply_markup=admin_markup)
     except Exception as e:
         print(f"Forward UTR Error: {e}")
@@ -222,18 +225,7 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
 @bot.callback_query_handler(func=lambda call: call.data.startswith('adm_'))
 def handle_admin_decision(call):
     try:
-        # ⚡ INSTANT FIX: Response dena taaki 'Not Responding' lag na aaye
-        try:
-            bot.answer_callback_query(call.id)
-        except Exception:
-            pass
-
-        # 🔧 ADMIN SECURITY CHECK: Admin ID validation
         if int(call.from_user.id) != int(ADMIN_ID):
-            try:
-                bot.answer_callback_query(call.id, "❌ Protected: Not Authorized!", show_alert=True)
-            except Exception:
-                pass
             return
             
         action_parts = call.data.split(':')
@@ -245,12 +237,10 @@ def handle_admin_decision(call):
             prompt_msg_id = int(action_parts[3])
             status_msg_id = int(action_parts[4])
             
-            # Admin ke paas photo gayi hai, isliye caption edit hoga
             existing_caption = call.message.caption or ""
             bot.edit_message_caption(chat_id=int(ADMIN_ID), message_id=call.message.message_id, 
                                      caption=existing_caption + "\n\n🟢 **Status: Approved & Media Delivered**")
             
-            # 🧹 USER CHAT CLEANUP: Status aur alert messages delete karna
             try:
                 bot.delete_message(chat_id=target_user_id, message_id=prompt_msg_id)
                 bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
@@ -266,7 +256,6 @@ def handle_admin_decision(call):
             prompt_msg_id = int(action_parts[3])
             status_msg_id = int(action_parts[4])
             
-            # Admin panel photo caption update for rejection
             existing_caption = call.message.caption or ""
             bot.edit_message_caption(chat_id=int(ADMIN_ID), message_id=call.message.message_id, 
                                      caption=existing_caption + "\n\n🔴 **Status: Rejected by Admin**")
