@@ -148,11 +148,11 @@ def start_payment(message):
                 "💎 *INSTRUCTIONS:*\n"
                 "1️⃣ *Scan the QR code above or copy the official UPI ID.*\n"
                 f"2️⃣ *Pay the exact amount of* `₹{exact_amount}` *carefully.*\n"
-                "3️⃣ *After successful payment, click the button below to upload your transaction screenshot.*"
+                "3️⃣ *After successful payment, click the button below to submit your 12-digit UTR Number for verification.*"
             )
             
             markup = InlineKeyboardMarkup()
-            submit_btn = InlineKeyboardButton("📤 Upload Payment Screenshot", callback_data=f"sub_utr:{token}:{exact_amount}")
+            submit_btn = InlineKeyboardButton("📩 Submit UTR (Verify)", callback_data=f"sub_utr:{token}:{exact_amount}")
             markup.add(submit_btn)
             
             bot.send_photo(chat_id, qr_img, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
@@ -171,7 +171,8 @@ def ask_for_utr(call):
         
         bot.answer_callback_query(call.id)
         
-        prompt_msg = bot.send_message(chat_id, "📸 *PAYMENT VERIFICATION*\n\n*Please upload and send your successful transaction screenshot receipt now as a photo reply here:*", parse_mode="Markdown")
+        # 🎯 TRACKING 1: Blue circled prompt message ki ID save ki (Mark wala message)
+        prompt_msg = bot.send_message(chat_id, "⌨️ *Verification Prompt:*\n\n*Please type and send your 12-digit Transaction UTR Number as a text reply here:*", parse_mode="Markdown")
         bot.register_next_step_handler(prompt_msg, forward_utr_to_admin, token, amount, prompt_msg.message_id)
     except Exception as e:
         print(f"Ask UTR Callback Error: {e}")
@@ -180,40 +181,37 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
     try:
         chat_id = message.chat.id
         user_name = message.from_user.first_name or "Premium User"
-        user_username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
+        utr_text = message.text.strip() if message.text else ""
         
-        if not message.photo:
-            bot.reply_to(message, "❌ *Input Error: Please upload an actual photo screenshot file only! Click checkout to retry.*", parse_mode="Markdown")
+        if not utr_text:
+            bot.reply_to(message, "❌ *Input Error: Please send your UTR Number strictly in text format. Click checkout to retry.*", parse_mode="Markdown")
             return
 
-        photo_file_id = message.photo[-1].file_id
-
-        if photo_file_id in processed_utrs:
+        if utr_text in processed_utrs:
             bot.send_message(chat_id, "⚠️ *Security Alert: This payment claim is already under active verification! Please wait patiently.*", parse_mode="Markdown")
             return
 
-        processed_utrs.add(photo_file_id)
+        processed_utrs.add(utr_text)
         
-        status_msg = bot.send_message(chat_id, "⌛ *Status Alert: Your payment verification screenshot is being processed by the admin. Please hold...*", parse_mode="Markdown")
+        # 🎯 TRACKING 2: Checking status message ki ID save ki
+        status_msg = bot.send_message(chat_id, "⌛ *Status Alert: Your payment is being verified by our server. Please hold for up to 60 seconds...*", parse_mode="Markdown")
         status_msg_id = status_msg.message_id
         
         admin_markup = InlineKeyboardMarkup()
         approve_btn = InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app:{chat_id}:{token}:{prompt_msg_id}:{status_msg_id}")
-        reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:skip:{prompt_msg_id}:{status_msg_id}")
+        reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:{utr_text}:{prompt_msg_id}:{status_msg_id}")
         admin_markup.row(approve_btn, reject_btn)
         
         admin_alert_text = (
-            "🔔 *System Alert: New Payment Request!* 🔔\n\n"
-            f"👤 *Customer Name:* {user_name}\n"
-            f"🆔 *User ID:* `{chat_id}`\n"
-            f"🏷️ *Username:* {user_username}\n"
-            f"💰 *Expected Amount:* ₹{amount}\n"
-            f"📦 *Link Token Access:* {token}\n\n"
-            "📎 *Action Required:* Check the attached screenshot below and approve/reject."
+            "🔔 *System Alert: New Manual Verification Request!* 🔔\n\n"
+            f"👤 *Premium Customer:* {user_name} (`{chat_id}`)\n"
+            f"💰 *Expected Amount:* `₹{amount}`\n"
+            f"📦 *Link Token Access:* `{token}`\n"
+            f"🆔 *Submitted UTR:* `{utr_text}`\n\n"
+            "📎 *Action Required:* Check bank panel and manually approve or reject below."
         )
         
-        # Yeh line aapke text mein se cut gayi thi, jo admin ko photo ke sath saari details bhejegi
-        bot.send_photo(ADMIN_ID, photo_file_id, caption=admin_alert_text, parse_mode="Markdown", reply_markup=admin_markup)
+        bot.send_message(ADMIN_ID, admin_alert_text, parse_mode="Markdown", reply_markup=admin_markup)
     except Exception as e:
         print(f"Forward UTR Error: {e}")
 
@@ -236,45 +234,48 @@ def handle_admin_decision(call):
             prompt_msg_id = int(action_parts[3])
             status_msg_id = int(action_parts[4])
             
-            bot.answer_callback_query(call.id, "Gateway Action: Payment Approved!")
+            bot.answer_callback_query(call.id, "✅ Gateway Action: Payment Approved!")
+            bot.edit_message_text(chat_id=ADMIN_ID, message_id=call.message.message_id, 
+                                  text=call.message.text + "\n\n🟢 **Status Panel: Approved & Premium Delivered**")
             
-            existing_caption = call.message.caption or ""
-            bot.edit_message_caption(chat_id=ADMIN_ID, message_id=call.message.message_id, 
-                                     caption=existing_caption + "\n\n🟢 **Status Panel: Approved & Premium Delivered**")
-            
+            # 🔥 AUTOMATIC DELETE: Accept par click karte hi Mark wala aur status message delete!
             try:
                 bot.delete_message(chat_id=target_user_id, message_id=prompt_msg_id)
                 bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
             except Exception as del_err:
                 print(f"Pre-delivery text deletion failed: {del_err}")
             
+            # 🎯 STYLISH CUSTOM TEXT STATUS:
             custom_msg = bot.send_message(target_user_id, "🎉 *Payment successful!*\n*Media Sending...*", parse_mode="Markdown")
+            
+            # 🚀 Forwarder Engine call karke state tracking message id ko pass kiya
             deliver_media(target_user_id, token, custom_msg.message_id)
             
         elif action == "adm_rej":
             target_user_id = int(action_parts[1])
-            prompt_msg_id = int(action_parts[2])
-            status_msg_id = int(action_parts[3])
+            utr_key = action_parts[2]
+            prompt_msg_id = int(action_parts[3])
+            status_msg_id = int(action_parts[4])
             
             bot.answer_callback_query(call.id, "❌ Gateway Action: Claim Rejected!")
+            bot.edit_message_text(chat_id=ADMIN_ID, message_id=call.message.message_id, 
+                                  text=call.message.text + "\n\n🔴 **Status Panel: Rejected by System Admin**")
             
-            existing_caption = call.message.caption or ""
-            bot.edit_message_caption(chat_id=ADMIN_ID, message_id=call.message.message_id, 
-                                     caption=existing_caption + "\n\n🔴 **Status Panel: Rejected by System Admin**")
-            
+            # 🔥 AUTOMATIC DELETE: Reject karne par bhi dono text messages chat se gayab!
             try:
                 bot.delete_message(chat_id=target_user_id, message_id=prompt_msg_id)
                 bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
             except Exception as del_err:
                 print(f"Reject mode text deletion failed: {del_err}")
                 
-            bot.send_message(target_user_id, "❌ *Verification Failed: Admin has rejected your payment status. Please recheck your screenshot proof and try again.*", parse_mode="Markdown")
+            bot.send_message(target_user_id, "❌ *Verification Failed: Admin has rejected your payment status. Please confirm the correct UTR details and try again.*", parse_mode="Markdown")
+            processed_utrs.discard(utr_key)
             
     except Exception as e:
         print(f"Callback Error: {e}")
 
 # =====================================================================
-# 📦 STEP 7: PRIVATE CHANNEL MESSAGES AUTO-FORWARD ENGINE (SHORT ENGINE)
+# 📦 STEP 7: PRIVATE CHANNEL MESSAGES AUTO-FORWARD ENGINE
 # =====================================================================
 def deliver_media(chat_id, token, custom_msg_id):
     try:
@@ -289,26 +290,27 @@ def deliver_media(chat_id, token, custom_msg_id):
         media_forwarded = False
 
         if channel_id and channel_id != "@ChangeMe":
-            # 🚀 TELE-FORWARD ENGINE: Private channel ke content ko bulk forward karega
+            # 🚀 TELE-FORWARD ENGINE: Channel ke messages ko bulk forward karega!
+            # Loop range ko aap channel ke top uploded total messages ke hisab se set kar sakte hain (e.g. 1 se 100 tak ke id slots)
             for msg_id in range(1, 100):
                 try:
                     bot.forward_message(chat_id=chat_id, from_chat_id=channel_id, message_id=msg_id)
                     media_forwarded = True
-                    time.sleep(1.0) # Buffer rate delay for anti-freeze security
+                    time.sleep(1.0) # Safe buffer speed delay taaki account restriction ya heavy flood na aaye
                 except Exception as forward_err:
-                    # Invalid/Khali slots ko bina crash kiye automatic skip karega
+                    # Slot khali hone par ya message id delete hone par loop skip karega bina engine crash kiye
                     continue
         
-        # 🎯 🔥 CLEANUP SEQUENCE: Media aane ke baad hi "Media Sending..." text delete hoga
+        # 🎯 🔥 CONTROLLED CLEANUP SEQUENCE: Media verified forward hone ke baad hi dynamic message text delete hoga
         if media_forwarded:
             time.sleep(1)
             try:
                 bot.delete_message(chat_id=chat_id, message_id=custom_msg_id)
-                print("DEBUG: Status layout optimized after transmission complete.")
+                print("DEBUG: Active status layout cleanly optimized after validated auto-forward operations.")
             except Exception as cleanup_err:
-                print(f"Cleanup skip: {cleanup_err}")
+                print(f"Status cleanup logic break: {cleanup_err}")
         else:
-            bot.send_message(chat_id, "⚠️ *System Notice: Target premium channel config error. Contact Admin.*", parse_mode="Markdown")
+            bot.send_message(chat_id, "⚠️ *System Notice: Target channel ID is either incorrect or bot is not added as Admin in the private channel.*", parse_mode="Markdown")
                     
     except Exception as e:
         print(f"Global Delivery Engine Error: {e}")
@@ -318,11 +320,11 @@ def deliver_media(chat_id, token, custom_msg_id):
 # =====================================================================
 if __name__ == "__main__":
     try:
-        # Render Flask dashboard background verification sync engine trigger
+        # Render Flask dashboard server background startup trigger
         keep_alive()
-        print("🚀 SkyBox Premium Forwarder Pro has been successfully updated on Render...")
+        print("🚀 SkyBox Forwarder Pro Bot has been successfully updated on Render...")
         
-        # Infinite tracking polling activation restarter cycle loop
+        # Infinite tracking cycle execution system reset recovery handler
         bot.infinity_polling(timeout=10, long_polling_timeout=5)
     except Exception as e:
-        print(f"Loop Crash Restarter Alert: {e}")
+        print(f"Loop Crash Restarter: {e}")
