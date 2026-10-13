@@ -122,7 +122,7 @@ def generate_link(message):
     bot.reply_to(message, structure_text, parse_mode="Markdown")
 
 # =====================================================================
-# 📦 STEP 5: USER CHECKOUT & IMAGE PIPELINE (STRICT PROOF TRACKING)
+# 📦 STEP 5: USER CHECKOUT & IMAGE PIPELINE (SHORT PREMIUM CORE)
 # =====================================================================
 
 @bot.message_handler(commands=['start'])
@@ -132,7 +132,7 @@ def start_payment(message):
         msg_text = message.text.strip()
         
         if msg_text == "/start" or len(msg_text.split()) < 2:
-            bot.reply_to(message, "👋 *Welcome to SkyBox Premium Portal!*\n\n*Kindly click on a valid product checkout link to unlock your premium contents immediately.*", parse_mode="Markdown")
+            bot.reply_to(message, "👋 *Welcome! Please click a valid product checkout link to start.*", parse_mode="Markdown")
             return
             
         token = msg_text.split()[1].strip()
@@ -141,25 +141,22 @@ def start_payment(message):
             exact_amount = saved_links[token]["amount"]
             qr_img = generate_upi_qr(UPI_ID, exact_amount)
             
-            # 🎉 FIXED: Premium english caption with customized checkout rules
             caption_text = (
                 "⚡ *SKYBOX PREMIUM CHECKOUT* ⚡\n\n"
-                f"💰 *Pay Exact Amount:* `₹{exact_amount}`\n"
-                f"📌 *Official UPI ID:* `{UPI_ID}`\n\n"
+                f"💰 *Pay Amount:* `₹{exact_amount}`\n"
+                f"📌 *UPI ID:* `{UPI_ID}`\n\n"
                 "💎 *INSTRUCTIONS:*\n"
-                "1️⃣ *Scan the QR code above or copy the official UPI ID.*\n"
-                f"2️⃣ *Transfer the exact amount of* `₹{exact_amount}` *carefully.*\n"
-                "3️⃣ *After successful payment, click the button below to upload your transaction confirmation receipt.*"
+                f"1️⃣ *Pay exact* `₹{exact_amount}` *via QR or UPI ID.*\n"
+                "2️⃣ *Click below to upload your payment screenshot image.*"
             )
             
             markup = InlineKeyboardMarkup()
-            # 🎉 CHANGED: Premium customized dynamic upload trigger button
-            submit_btn = InlineKeyboardButton("📤 Upload & Verify Payment Receipt", callback_data=f"sub_utr:{token}:{exact_amount}")
+            submit_btn = InlineKeyboardButton("📤 Upload Payment Screenshot", callback_data=f"sub_utr:{token}:{exact_amount}")
             markup.add(submit_btn)
             
             bot.send_photo(chat_id, qr_img, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
         else:
-            bot.reply_to(message, "❌ *System Alert: The checkout link you used is either invalid or has expired!*", parse_mode="Markdown")
+            bot.reply_to(message, "❌ *Error: Invalid or expired checkout link!*", parse_mode="Markdown")
     except Exception as e:
         print(f"Start Error: {e}")
 
@@ -173,17 +170,13 @@ def ask_for_utr(call):
         
         bot.answer_callback_query(call.id)
         
-        # 🎯 TRACKING 1: Customized pristine premium english validation instructions
+        # 🎉 SHORT TEXT: Clean compact payment instructions
         prompt_msg = bot.send_message(
             chat_id, 
-            "📸 *PAYMENT VERIFICATION ENGINE* 📸\n\n"
-            "⚠️ *Strict Security Protocol Required:*\n"
-            "*Please upload and send the authentic screenshot of your successful transaction receipt now.*\n\n"
-            "💡 *Note:* _Ensure the screenshot is clear, uncropped, and explicitly shows the transferred amount. Sending invalid or generic images will cause automated protection flags._", 
+            "📸 *PAYMENT VERIFICATION*\n\n"
+            "👉 *Please upload and send your successful transaction screenshot receipt now.*", 
             parse_mode="Markdown"
         )
-        
-        # Next step handler shifts directly to photo validation system
         bot.register_next_step_handler(prompt_msg, forward_utr_to_admin, token, amount, prompt_msg.message_id)
     except Exception as e:
         print(f"Ask UTR Callback Error: {e}")
@@ -191,51 +184,42 @@ def ask_for_utr(call):
 def forward_utr_to_admin(message, token, amount, prompt_msg_id):
     try:
         chat_id = message.chat.id
-        user_name = message.from_user.first_name or "Premium User"
+        user_name = message.from_user.first_name or "Premium Customer"
+        user_username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
         
-        # 🚨 STRICT STRUCTURAL FILTER: Blocks non-image files, random texts or documents
         if not message.photo:
-            bot.reply_to(
-                message, 
-                "❌ *Verification Denied: Invalid Content Type!*\n\n"
-                "*You must send an actual transaction screenshot as a photo file.* _Random texts, generic links, or empty documents are automatically blocked._\n\n"
-                "📌 *Action Required:* _Kindly click the link again and retry with a valid photo receipt._", 
-                parse_mode="Markdown"
-            )
+            bot.reply_to(message, "❌ *Error: Please upload an actual photo screenshot file only!*", parse_mode="Markdown")
             return
 
-        # Extracts top high-resolution photo file id element from message array
         photo_file_id = message.photo[-1].file_id
 
         if photo_file_id in processed_utrs:
-            bot.send_message(chat_id, "⚠️ *Security Alert: This payment token receipt is already under active audit review. Duplicate uploads blocked.*", parse_mode="Markdown")
+            bot.send_message(chat_id, "⚠️ *Alert: This receipt is already processing! Please wait.*", parse_mode="Markdown")
             return
 
         processed_utrs.add(photo_file_id)
         
-        # 🎯 TRACKING 2: Pristine clean status alert custom english text
-        status_msg = bot.send_message(
-            chat_id, 
-            "⌛ *Status Alert: Your payment verification request is being audited by our network server. Please hold patiently while we complete the validation query...*", 
-            parse_mode="Markdown"
-        )
+        # 🎉 SHORT TEXT: Short clear customer loading text
+        status_msg = bot.send_message(chat_id, "⌛ *Verifying your payment. Please wait patiently...*", parse_mode="Markdown")
         status_msg_id = status_msg.message_id
         
         admin_markup = InlineKeyboardMarkup()
-        # Callback strings passing strict reference logs directly to admin dashboard
+        # Cleaned safe index serialization strings
         approve_btn = InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app:{chat_id}:{token}:{prompt_msg_id}:{status_msg_id}")
-        reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:{photo_file_id}:{prompt_msg_id}:{status_msg_id}")
+        reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:{prompt_msg_id}:{status_msg_id}")
         admin_markup.row(approve_btn, reject_btn)
         
+        # 👑 PREMIUM ADMIN MONITOR SYSTEM: Shows Name, Chat ID, Username and the real photo proof
         admin_alert_text = (
-            "🔔 *System Alert: New Payment Receipt Verification Request!* 🔔\n\n"
-            f"👤 *Premium Customer:* {user_name} (`{chat_id}`)\n"
+            "🔔 *NEW VERIFICATION REQUEST!* 🔔\n\n"
+            f"👤 *Customer Name:* *{user_name}*\n"
+            f"🆔 *User Chat ID:* `{chat_id}`\n"
+            f"🌐 *Telegram Username:* {user_username}\n"
             f"💰 *Expected Amount:* `₹{amount}`\n"
-            f"📦 *Link Token Access:* `{token}`\n\n"
-            "📎 *Action Required:* _Inspect the transaction receipt photo sent below and manually decide the action code via panel buttons._"
+            f"📦 *Link Token ID:* `{token}`\n\n"
+            "📎 *Action:* Verify the photo below and manual approve/reject."
         )
         
-        # Admin receives the customer's photo proof along with structured quick action buttons
         bot.send_photo(ADMIN_ID, photo_file_id, caption=admin_alert_text, parse_mode="Markdown", reply_markup=admin_markup)
     except Exception as e:
         print(f"Forward UTR Error: {e}")
@@ -247,7 +231,7 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
 def handle_admin_decision(call):
     try:
         if call.from_user.id != ADMIN_ID:
-            bot.answer_callback_query(call.id, "❌ System Protection: Not Authorized!", show_alert=True)
+            bot.answer_callback_query(call.id, "❌ Protected: Not Authorized!", show_alert=True)
             return
             
         action_parts = call.data.split(':')
@@ -259,16 +243,15 @@ def handle_admin_decision(call):
             prompt_msg_id = int(action_parts[3])
             status_msg_id = int(action_parts[4])
             
-            bot.answer_callback_query(call.id, "✅ Gateway Action: Payment Approved!")
+            bot.answer_callback_query(call.id, "✅ Approved!")
             bot.edit_message_caption(chat_id=ADMIN_ID, message_id=call.message.message_id, 
-                                     caption=call.message.caption + "\n\n🟢 **Status Panel: Approved & Premium Delivered**")
+                                     caption=call.message.caption + "\n\n🟢 **Status: Approved & Media Delivered**")
             
-            # 🔥 AUTOMATIC CLEANUP: User chat prompt text logs cleanly deleted from view instantly
             try:
                 bot.delete_message(chat_id=target_user_id, message_id=prompt_msg_id)
                 bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
             except Exception as del_err:
-                print(f"Pre-delivery text deletion failed: {del_err}")
+                print(f"Deletion failed: {del_err}")
             
             custom_msg = bot.send_message(target_user_id, "🎉 *Payment successful!*\n*Media Sending...*", parse_mode="Markdown")
             
@@ -276,28 +259,26 @@ def handle_admin_decision(call):
             
         elif action == "adm_rej":
             target_user_id = int(action_parts[1])
-            photo_key = action_parts[2]
-            prompt_msg_id = int(action_parts[3])
-            status_msg_id = int(action_parts[4])
+            prompt_msg_id = int(action_parts[2])
+            status_msg_id = int(action_parts[3])
             
-            bot.answer_callback_query(call.id, "❌ Gateway Action: Claim Rejected!")
+            bot.answer_callback_query(call.id, "❌ Rejected!")
             bot.edit_message_caption(chat_id=ADMIN_ID, message_id=call.message.message_id, 
-                                     caption=call.message.caption + "\n\n🔴 **Status Panel: Rejected by System Admin**")
+                                     caption=call.message.caption + "\n\n🔴 **Status: Rejected by Admin**")
             
             try:
                 bot.delete_message(chat_id=target_user_id, message_id=prompt_msg_id)
                 bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
             except Exception as del_err:
-                print(f"Reject mode text deletion failed: {del_err}")
+                print(f"Deletion failed: {del_err}")
                 
-            bot.send_message(target_user_id, "❌ *Verification Failed: Admin has rejected your payment transaction status. Please ensure you upload the correct successful receipt screenshot and try again.*", parse_mode="Markdown")
-            processed_utrs.discard(photo_key)
+            bot.send_message(target_user_id, "❌ *Payment status rejected by Admin. Please recheck your screenshot proof and try again.*", parse_mode="Markdown")
             
     except Exception as e:
         print(f"Callback Error: {e}")
 
 # =====================================================================
-# 📦 STEP 7: PRIVATE CHANNEL MESSAGES AUTO-FORWARD ENGINE (BOLD ENGINE)
+# 📦 STEP 7: PRIVATE CHANNEL MESSAGES AUTO-FORWARD ENGINE (SHORT ENGINE)
 # =====================================================================
 def deliver_media(chat_id, token, custom_msg_id):
     try:
@@ -312,26 +293,26 @@ def deliver_media(chat_id, token, custom_msg_id):
         media_forwarded = False
 
         if channel_id and channel_id != "@ChangeMe":
-            # 🚀 TELE-FORWARD ENGINE: Channel ke messages ko bina crash huye forward karega
+            # 🚀 TELE-FORWARD ENGINE: Private channel ke content ko bulk forward karega
             for msg_id in range(1, 100):
                 try:
                     bot.forward_message(chat_id=chat_id, from_chat_id=channel_id, message_id=msg_id)
                     media_forwarded = True
-                    time.sleep(1.0) # Safe network sync delay for zero freeze protection
+                    time.sleep(1.0) # Buffer rate delay for anti-freeze security
                 except Exception as forward_err:
-                    # Khali message slot hone par automatically skip karega lines crash kiye bina
+                    # Invalid/Khali slots ko bina crash kiye automatic skip karega
                     continue
         
-        # 🎯 🔥 CRITICAL FIXED CLEANUP SEQUENCE: Media verified aane ke baad hi text hatega
+        # 🎯 🔥 CLEANUP SEQUENCE: Media aane ke baad hi "Media Sending..." text delete hoga
         if media_forwarded:
             time.sleep(1)
             try:
                 bot.delete_message(chat_id=chat_id, message_id=custom_msg_id)
-                print("DEBUG: Active status text marker cleared safely after verified channel transmission.")
+                print("DEBUG: Status layout optimized after transmission complete.")
             except Exception as cleanup_err:
-                print(f"Status cleanup logic break: {cleanup_err}")
+                print(f"Cleanup skip: {cleanup_err}")
         else:
-            bot.send_message(chat_id, "⚠️ *System Protection Warning: Target premium channel configuration is missing or the Bot lacks Administrator privileges inside the vault channel.*", parse_mode="Markdown")
+            bot.send_message(chat_id, "⚠️ *System Notice: Target premium channel config error. Contact Admin.*", parse_mode="Markdown")
                     
     except Exception as e:
         print(f"Global Delivery Engine Error: {e}")
@@ -341,11 +322,11 @@ def deliver_media(chat_id, token, custom_msg_id):
 # =====================================================================
 if __name__ == "__main__":
     try:
-        # Render background Flask live verification ping engine startup
+        # Render Flask dashboard background verification sync engine trigger
         keep_alive()
         print("🚀 SkyBox Premium Forwarder Pro has been successfully updated on Render...")
         
-        # Infinite continuous long polling restarter mechanism loop
+        # Infinite tracking polling activation restarter cycle loop
         bot.infinity_polling(timeout=10, long_polling_timeout=5)
     except Exception as e:
-        print(f"Loop Crash Restarter Module Alert: {e}")
+        print(f"Loop Crash Restarter Alert: {e}")
