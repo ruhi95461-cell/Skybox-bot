@@ -215,9 +215,7 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
             "📎 *Action Required:* Verify the photo below and manual approve/reject."
         )
         
-        # ✅ FIX: Explicit integer typecasting lagayi hai taaki jab aap khud Admin se message karein toh message drop na ho
-        bot.send_photo(int(ADMIN_ID), photo_file_id, caption=admin_alert_text, reply_markup=admin_markup)
-        print("DEBUG: Admin Alert photo pushed successfully.")
+        bot.send_message(ADMIN_ID, admin_alert_text, parse_mode="Markdown", reply_markup=admin_markup)
     except Exception as e:
         print(f"Forward UTR Error: {e}")
 
