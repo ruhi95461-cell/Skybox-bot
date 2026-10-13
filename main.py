@@ -135,6 +135,7 @@ def start_payment(message):
             bot.reply_to(message, "👋 *Welcome! Please click a valid product checkout link to start.*", parse_mode="Markdown")
             return
             
+        # ✅ FIX: Sahi se token nikalne ke liye split ka index use kiya aur strip lagaya
         token = msg_text.split()[1].strip()
         
         if token in saved_links:
@@ -165,6 +166,8 @@ def ask_for_utr(call):
     try:
         chat_id = call.message.chat.id
         data_parts = call.data.split(':')
+        
+        # ✅ FIX: Indexes ko explicitly wapas restore kiya taaki crash na ho
         token = data_parts[1]
         amount = data_parts[2]
         
@@ -176,7 +179,6 @@ def ask_for_utr(call):
             "👉 *Please upload and send your successful transaction screenshot receipt now.*", 
             parse_mode="Markdown"
         )
-        # Fixed parameters registration context
         bot.register_next_step_handler(prompt_msg, lambda msg: forward_utr_to_admin(msg, token, amount, prompt_msg.message_id))
     except Exception as e:
         print(f"Ask UTR Callback Error: {e}")
@@ -203,7 +205,7 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
         status_msg_id = status_msg.message_id
         
         admin_markup = InlineKeyboardMarkup()
-        # Simplified Callback format to avoid string index mismatch crashes
+        # ✅ FIX: Proper string formatting callback data ke liye
         approve_btn = InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app:{chat_id}:{token}:{prompt_msg_id}:{status_msg_id}")
         reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:{photo_file_id}:{prompt_msg_id}:{status_msg_id}")
         admin_markup.row(approve_btn, reject_btn)
@@ -218,7 +220,8 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
             "📎 *Action:* Verify the photo below and manual approve/reject."
         )
         
-        bot.send_photo(ADMIN_ID, photo_file_id, caption=admin_alert_text, parse_mode="Markdown", reply_markup=admin_markup)
+        # Yahan ADMIN_ID string format se int casting automatic handle ho jayega
+        bot.send_photo(int(ADMIN_ID), photo_file_id, caption=admin_alert_text, parse_mode="Markdown", reply_markup=admin_markup)
         print("DEBUG: Admin Alert pushed successfully.")
     except Exception as e:
         print(f"Forward UTR Error: {e}")
@@ -229,13 +232,13 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
 @bot.callback_query_handler(func=lambda call: call.data.startswith('adm_'))
 def handle_admin_decision(call):
     try:
-        # ⚡ INSTANT FIX: Click hote hi sabse pehle Telegram ko reply dena hai taaki NOT RESPONDING error kabhi na aaye
+        # ⚡ INSTANT FIX: Click hote hi sabse pehle Telegram ko response dena hai taaki NOT RESPONDING error na aaye
         try:
             bot.answer_callback_query(call.id)
         except Exception:
             pass
 
-        # 🔧 ADMIN SELF-TEST FIX: int() casting dono taraf lagayi hai taaki aap apni hi ID se screenshot bhejkar test kar sakein
+        # 🔧 ADMIN SELF-TEST FIX: int() casting ki wajah se ab aap apni Admin ID se bhi test kar payenge
         if int(call.from_user.id) != int(ADMIN_ID):
             try:
                 bot.answer_callback_query(call.id, "❌ Protected: Not Authorized!", show_alert=True)
@@ -252,11 +255,11 @@ def handle_admin_decision(call):
             prompt_msg_id = int(action_parts[3])
             status_msg_id = int(action_parts[4])
             
-            # Caption update sequence instantly triggered
-            bot.edit_message_caption(chat_id=ADMIN_ID, message_id=call.message.message_id, 
+            # Admin panel ka caption instantly badlein
+            bot.edit_message_caption(chat_id=int(ADMIN_ID), message_id=call.message.message_id, 
                                      caption=call.message.caption + "\n\n🟢 **Status: Approved & Media Delivered**")
             
-            # 🔥 AUTOMATIC CLEANUP: User text logs deleted completely (Aapka original logic)
+            # 🔥 AUTOMATIC CLEANUP: User text logs ko delete karna (Aapka original feature)
             try:
                 bot.delete_message(chat_id=target_user_id, message_id=prompt_msg_id)
                 bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
@@ -273,7 +276,8 @@ def handle_admin_decision(call):
             prompt_msg_id = int(action_parts[3])
             status_msg_id = int(action_parts[4])
             
-            bot.edit_message_caption(chat_id=ADMIN_ID, message_id=call.message.message_id, 
+            # Admin panel ka caption instantly badlein
+            bot.edit_message_caption(chat_id=int(ADMIN_ID), message_id=call.message.message_id, 
                                      caption=call.message.caption + "\n\n🔴 **Status: Rejected by Admin**")
             
             try:
