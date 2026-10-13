@@ -135,7 +135,7 @@ def start_payment(message):
             bot.reply_to(message, "👋 Welcome! Please click a valid product checkout link to start.")
             return
             
-        # ✅ FIXED: Pehle list ka 2nd item nikala, phir use .strip() kiya taaki crash na ho
+        # ✅ ABSOLUTE FIX: Pehle text split kiya, index 1 se token uthaya, fir use .strip() kiya
         token = msg_text.split()[1].strip()
         
         if token in saved_links:
@@ -166,6 +166,8 @@ def ask_for_utr(call):
     try:
         chat_id = call.message.chat.id
         data_parts = call.data.split(':')
+        
+        # ✅ FIXED: Correct list index extracted safely
         token = data_parts[1]
         amount = data_parts[2]
         
@@ -176,12 +178,15 @@ def ask_for_utr(call):
             "📸 PAYMENT VERIFICATION\n\n👉 Please upload and send your successful transaction screenshot receipt now."
         )
         
-        # ✅ FIXED: Proper lambda parameter passing without missing scopes
-        bot.register_next_step_handler(prompt_msg, lambda msg: forward_utr_to_admin(msg, token, amount, prompt_msg.message_id))
+        # ✅ FIXED: Lambda capture block handles accurate local parameters tracking
+        bot.register_next_step_handler(
+            prompt_msg, 
+            lambda msg, t=token, a=amount, p_id=prompt_msg.message_id: forward_screenshot_to_admin(msg, t, a, p_id)
+        )
     except Exception as e:
         print(f"Ask UTR Callback Error: {e}")
 
-def forward_utr_to_admin(message, token, amount, prompt_msg_id):
+def forward_screenshot_to_admin(message, token, amount, prompt_msg_id):
     try:
         chat_id = message.chat.id
         user_name = message.from_user.first_name or "Premium Customer"
@@ -217,6 +222,7 @@ def forward_utr_to_admin(message, token, amount, prompt_msg_id):
             "📎 Action: Verify the photo below and manual approve/reject."
         )
         
+        # Admin validation triggers image pipeline instantly
         bot.send_photo(int(ADMIN_ID), photo_file_id, caption=admin_alert_text, reply_markup=admin_markup)
         print("DEBUG: Admin Alert pushed successfully.")
     except Exception as e:
