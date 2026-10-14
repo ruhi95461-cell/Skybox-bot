@@ -31,9 +31,9 @@ saved_links = {
         "channel_id": "-1004389531080" 
     }, 
 
-    "712033235ffd": {
-        "amount": 3.00,
-        "channel_id": "@SkyBoxTestChannel2"  
+    "86fb9961877b": {
+        "amount": 54.00,
+        "channel_id": "-1004340284198"  
     },
 
     "a3a1d01468ba": {
