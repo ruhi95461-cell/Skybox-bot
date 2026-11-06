@@ -11,6 +11,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 # =====================================================================
 # 📦 STEP 1: CONFIGURATION & CONFIG BLOCK (PREMIUM EMISSARY)
 # =====================================================================
+# ⚠️ SECURITY NOTICE: Apne bot ka purana token revoke karke naya yahan zaroor dalein!
 BOT_TOKEN = "8963839676:AAHGTnd6QcysW9DrCUMQrnW8xRf52J-wBe8" 
 ADMIN_ID = 8393210427
 UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
@@ -22,34 +23,13 @@ app = Flask('')
 # =====================================================================
 # 📦 STEP 2: REGISTER CACHES & PERMANENT TELE-FORWARD DATABASE
 # =====================================================================
-processed_utrs = set()  # Active UTR cache memory to prevent spam
-
-# 💡 LIFETIME FORWARDER DATABASE: Yahan apne product channels link karein
+# Hardcoded links aur products details
 saved_links = {
-    "585f5f2f9ec1": {
-        "amount": 55.00,
-        "channel_id": "-1004389531080" 
-    }, 
-
-    "86fb9961877b": {
-        "amount": 54.00,
-        "channel_id": "-1004340284198"  
-    },
-
-    "c088b2255041": {
-        "amount": 75.00,
-        "channel_id": "-1004317431275"  
-    },
-
-    "a3a1d01468ba": {
-        "amount": 65.00,
-        "channel_id": "-1004374958890"  
-    },
-
-    "4ceb022fdee3": {
-        "amount": 68.00, 
-        "channel_id": -1003972171866
-    } 
+    "585f5f2f9ec1": {"amount": 55.00, "channel_id": "-1004389531080"}, 
+    "86fb9961877b": {"amount": 54.00, "channel_id": "-1004340284198"},
+    "c088b2255041": {"amount": 75.00, "channel_id": "-1004317431275"},
+    "a3a1d01468ba": {"amount": 65.00, "channel_id": "-1004374958890"},
+    "4ceb022fdee3": {"amount": 68.00, "channel_id": -1003972171866} 
 } 
 
 # =====================================================================
@@ -82,7 +62,6 @@ def keep_alive():
 # =====================================================================
 # 📦 STEP 4: TELEGRAM ADMIN COMMANDS & HANDLERS
 # =====================================================================
-
 @bot.message_handler(commands=['gen'])
 def generate_link(message):
     if message.from_user.id != ADMIN_ID:
@@ -105,7 +84,7 @@ def generate_link(message):
             return
         
     unique_token = secrets.token_hex(6)
-    user_link = f"https://t.me/{BOT_USERNAME}?start={unique_token}"
+    user_link = f"https://t.me{BOT_USERNAME}?start={unique_token}"
     
     structure_text = (
         f"👑 *Gateway Forwarder Link Generated!* 👑\n\n"
@@ -125,11 +104,10 @@ def generate_link(message):
     }
     
     bot.reply_to(message, structure_text, parse_mode="Markdown")
-
+    
 # =====================================================================
-# 📦 STEP 5: USER CHECKOUT & FLOW PIPELINE (FORWARDING CORE TRACKING)
+# 📦 STEP 5: USER CHECKOUT & FLOW PIPELINE (SCREENSHOT VERIFICATION)
 # =====================================================================
-
 @bot.message_handler(commands=['start'])
 def start_payment(message):
     try:
@@ -153,11 +131,11 @@ def start_payment(message):
                 "💎 *INSTRUCTIONS:*\n"
                 "1️⃣ *Scan the QR code above or copy the official UPI ID.*\n"
                 f"2️⃣ *Pay the exact amount of* `₹{exact_amount}` *carefully.*\n"
-                "3️⃣ *After successful payment, click the button below to submit your 12-digit UTR Number for verification.*"
+                "3️⃣ *After successful payment, click the button below to submit your Payment Screenshot for manual verification.*"
             )
             
             markup = InlineKeyboardMarkup()
-            submit_btn = InlineKeyboardButton("📩 Submit UTR (Verify)", callback_data=f"sub_utr:{token}:{exact_amount}")
+            submit_btn = InlineKeyboardButton("✅ Paid? Send Screenshot", callback_data=f"sub_scr:{token}:{exact_amount}")
             markup.add(submit_btn)
             
             bot.send_photo(chat_id, qr_img, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
@@ -166,8 +144,8 @@ def start_payment(message):
     except Exception as e:
         print(f"Start Error: {e}")
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith('sub_utr:'))
-def ask_for_utr(call):
+@bot.callback_query_handler(func=lambda call: call.data.startswith('sub_scr:'))
+def ask_for_screenshot(call):
     try:
         chat_id = call.message.chat.id
         data_parts = call.data.split(':')
@@ -176,49 +154,46 @@ def ask_for_utr(call):
         
         bot.answer_callback_query(call.id)
         
-        # 🎯 TRACKING 1: Blue circled prompt message ki ID save ki (Mark wala message)
-        prompt_msg = bot.send_message(chat_id, "⌨️ *Verification Prompt:*\n\n*Please type and send your 12-digit Transaction UTR Number as a text reply here:*", parse_mode="Markdown")
-        bot.register_next_step_handler(prompt_msg, forward_utr_to_admin, token, amount, prompt_msg.message_id)
+        prompt_msg = bot.send_message(chat_id, "📸 *Verification Prompt:*\n\n*Please upload and send the Payment Screenshot (Photo) as a proof here:*", parse_mode="Markdown")
+        # Ab bot text ke bajaye photo/screenshot ka wait karega
+        bot.register_next_step_handler(prompt_msg, forward_screenshot_to_admin, token, amount, prompt_msg.message_id)
     except Exception as e:
-        print(f"Ask UTR Callback Error: {e}")
+        print(f"Ask Screenshot Callback Error: {e}")
 
-def forward_utr_to_admin(message, token, amount, prompt_msg_id):
+def forward_screenshot_to_admin(message, token, amount, prompt_msg_id):
     try:
         chat_id = message.chat.id
         user_name = message.from_user.first_name or "Premium User"
-        utr_text = message.text.strip() if message.text else ""
         
-        if not utr_text:
-            bot.reply_to(message, "❌ *Input Error: Please send your UTR Number strictly in text format. Click checkout to retry.*", parse_mode="Markdown")
+        # User ne agar photo nahi bheji (fake text ya firse command bhej diya) toh block kar do
+        if not message.photo:
+            bot.reply_to(message, "❌ *Input Error: Please send your proof strictly as a Photo/Screenshot. Click checkout button again to retry.*", parse_mode="Markdown")
             return
 
-        if utr_text in processed_utrs:
-            bot.send_message(chat_id, "⚠️ *Security Alert: This payment claim is already under active verification! Please wait patiently.*", parse_mode="Markdown")
-            return
+        # Clear quality ke liye sabse badi photo file ki ID select karein
+        photo_file_id = message.photo[-1].file_id
 
-        processed_utrs.add(utr_text)
-        
-        # 🎯 TRACKING 2: Checking status message ki ID save ki
-        status_msg = bot.send_message(chat_id, "⌛ *Status Alert: Your payment is being verified by our server. Please hold for up to 60 seconds...*", parse_mode="Markdown")
+        status_msg = bot.send_message(chat_id, "⌛ *Status Alert: Your screenshot is being reviewed by our server. Please hold for up to 60 seconds...*", parse_mode="Markdown")
         status_msg_id = status_msg.message_id
         
         admin_markup = InlineKeyboardMarkup()
         approve_btn = InlineKeyboardButton("✅ Accept (Deliver)", callback_data=f"adm_app:{chat_id}:{token}:{prompt_msg_id}:{status_msg_id}")
-        reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:{utr_text}:{prompt_msg_id}:{status_msg_id}")
+        reject_btn = InlineKeyboardButton("❌ Reject Claim", callback_data=f"adm_rej:{chat_id}:none:{prompt_msg_id}:{status_msg_id}")
         admin_markup.row(approve_btn, reject_btn)
         
         admin_alert_text = (
             "🔔 *System Alert: New Manual Verification Request!* 🔔\n\n"
             f"👤 *Premium Customer:* {user_name} (`{chat_id}`)\n"
             f"💰 *Expected Amount:* `₹{amount}`\n"
-            f"📦 *Link Token Access:* `{token}`\n"
-            f"🆔 *Submitted UTR:* `{utr_text}`\n\n"
-            "📎 *Action Required:* Check bank panel and manually approve or reject below."
+            f"📦 *Link Token Access:* `{token}`\n\n"
+            "📎 *Action Required:* View the attached screenshot and manually approve or reject below."
         )
         
-        bot.send_message(ADMIN_ID, admin_alert_text, parse_mode="Markdown", reply_markup=admin_markup)
+        # Admin ko caption ke sath direct photo screenshot jayega
+        bot.send_photo(ADMIN_ID, photo_file_id, caption=admin_alert_text, parse_mode="Markdown", reply_markup=admin_markup)
+        
     except Exception as e:
-        print(f"Forward UTR Error: {e}")
+        print(f"Forward Screenshot Error: {e}")
 
 # =====================================================================
 # 📦 STEP 6: ADMIN CORE DECISION CALLBACK HANDLER (STRICT SEQUENCE)
@@ -240,41 +215,34 @@ def handle_admin_decision(call):
             status_msg_id = int(action_parts[4])
             
             bot.answer_callback_query(call.id, "✅ Gateway Action: Payment Approved!")
-            bot.edit_message_text(chat_id=ADMIN_ID, message_id=call.message.message_id, 
-                                  text=call.message.text + "\n\n🟢 **Status Panel: Approved & Premium Delivered**")
+            bot.edit_message_caption(chat_id=ADMIN_ID, message_id=call.message.message_id, 
+                                     caption=call.message.caption + "\n\n🟢 **Status Panel: Approved & Premium Delivered**")
             
-            # 🔥 AUTOMATIC DELETE: Accept par click karte hi Mark wala aur status message delete!
             try:
                 bot.delete_message(chat_id=target_user_id, message_id=prompt_msg_id)
                 bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
             except Exception as del_err:
                 print(f"Pre-delivery text deletion failed: {del_err}")
-            
-            # 🎯 STYLISH CUSTOM TEXT STATUS:
+                
             custom_msg = bot.send_message(target_user_id, "🎉 *Payment successful!*\n*Media Sending...*", parse_mode="Markdown")
-            
-            # 🚀 Forwarder Engine call karke state tracking message id ko pass kiya
             deliver_media(target_user_id, token, custom_msg.message_id)
             
         elif action == "adm_rej":
             target_user_id = int(action_parts[1])
-            utr_key = action_parts[2]
             prompt_msg_id = int(action_parts[3])
             status_msg_id = int(action_parts[4])
             
             bot.answer_callback_query(call.id, "❌ Gateway Action: Claim Rejected!")
-            bot.edit_message_text(chat_id=ADMIN_ID, message_id=call.message.message_id, 
-                                  text=call.message.text + "\n\n🔴 **Status Panel: Rejected by System Admin**")
+            bot.edit_message_caption(chat_id=ADMIN_ID, message_id=call.message.message_id, 
+                                     caption=call.message.caption + "\n\n🔴 **Status Panel: Rejected by System Admin**")
             
-            # 🔥 AUTOMATIC DELETE: Reject karne par bhi dono text messages chat se gayab!
             try:
                 bot.delete_message(chat_id=target_user_id, message_id=prompt_msg_id)
                 bot.delete_message(chat_id=target_user_id, message_id=status_msg_id)
             except Exception as del_err:
                 print(f"Reject mode text deletion failed: {del_err}")
                 
-            bot.send_message(target_user_id, "❌ *Verification Failed: Admin has rejected your payment status. Please confirm the correct UTR details and try again.*", parse_mode="Markdown")
-            processed_utrs.discard(utr_key)
+            bot.send_message(target_user_id, "❌ *Verification Failed: Admin has rejected your payment status. Please confirm you paid the correct amount, send a valid screenshot and try again.*", parse_mode="Markdown")
             
     except Exception as e:
         print(f"Callback Error: {e}")
@@ -295,18 +263,15 @@ def deliver_media(chat_id, token, custom_msg_id):
         media_forwarded = False
 
         if channel_id and channel_id != "@ChangeMe":
-            # 🚀 TELE-FORWARD ENGINE: Channel ke messages ko bulk forward karega!
-            # Loop range ko aap channel ke top uploded total messages ke hisab se set kar sakte hain (e.g. 1 se 100 tak ke id slots)
+            # Bulk forward logic (1 se 100 range tak slots)
             for msg_id in range(1, 100):
                 try:
                     bot.forward_message(chat_id=chat_id, from_chat_id=channel_id, message_id=msg_id)
                     media_forwarded = True
-                    time.sleep(1.0) # Safe buffer speed delay taaki account restriction ya heavy flood na aaye
+                    time.sleep(1.0) 
                 except Exception as forward_err:
-                    # Slot khali hone par ya message id delete hone par loop skip karega bina engine crash kiye
                     continue
         
-        # 🎯 🔥 CONTROLLED CLEANUP SEQUENCE: Media verified forward hone ke baad hi dynamic message text delete hoga
         if media_forwarded:
             time.sleep(1)
             try:
@@ -325,11 +290,8 @@ def deliver_media(chat_id, token, custom_msg_id):
 # =====================================================================
 if __name__ == "__main__":
     try:
-        # Render Flask dashboard server background startup trigger
         keep_alive()
         print("🚀 SkyBox Forwarder Pro Bot has been successfully updated on Render...")
-        
-        # Infinite tracking cycle execution system reset recovery handler
         bot.infinity_polling(timeout=10, long_polling_timeout=5)
     except Exception as e:
         print(f"Loop Crash Restarter: {e}")
