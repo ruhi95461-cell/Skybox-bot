@@ -49,7 +49,7 @@ saved_links = {
 } 
 
 # =====================================================================
-# 📦 STEP 3: 5-SEC TIMEOUT CLOUD OCR, TIME GAP & ALIGNMENT ENGINE
+# 📦 STEP 3: FAST CLOUD OCR, ANTI-REPEAT TIME LOCK & VERIFICATION ENGINE
 # =====================================================================
 def generate_upi_qr(upi_id, amount):
     upi_url = f"upi://pay?pa={upi_id}&am={amount}&cu=INR"
@@ -78,32 +78,33 @@ def check_time_gap(full_text, now_ist):
             diff_minutes = (now_ist - receipt_dt).total_seconds() / 60.0
             
             if diff_minutes + 5 <= 0:
-                return False, f"Receipt time ({hr_str}:{min_str} {meridiem.upper()}) current time se aage hai."
+                return False, f"Receipt time ({hr_str}:{min_str} {meridiem.upper()}) current time se aage hai.", None
             if diff_minutes > MAX_TIME_GAP_MINUTES:
                 hrs_gap = round(diff_minutes / 60, 1)
-                return False, f"Time gap 2 ghante se zyada hai ({hrs_gap} hrs purana screenshot)."
-        return True, "Time gap within 2 hours"
+                return False, f"Time gap 2 ghante se zyada hai ({hrs_gap} hrs purana screenshot).", None
+        first_hr, first_mn, first_mer = next(iter(matches_12h))
+        time_tag = f"{int(first_hr):02d}:{first_mn}{first_mer}"
+        return True, "Time gap within 2 hours", time_tag
     
-    return False, "Receipt ka exact AM/PM time detect nahi hua."
+    return False, "Receipt ka exact AM/PM time detect nahi hua.", None
 
 def analyze_screenshot(image_bytes, expected_amount):
     try:
-        pil_img = Image.open(io.BytesIO(image_bytes))
-        w_orig, h_orig = pil_img.size
-        if w_orig >= h_orig:
-            return "AUTO_REJECT", "Ye mobile payment screenshot nahi hai (Invalid orientation).", None
-
+        ocr_endpoint = "https://" + "api.ocr.space" + "/parse/image"
         resp = requests.post(
-            "https://api.ocr.space/parse/image",
+            ocr_endpoint,
+            headers={"apikey": OCR_API_KEY},
             files={"file": ("receipt.jpg", image_bytes, "image/jpeg")},
             data={
-                "apikey": OCR_API_KEY,
                 "language": "eng",
                 "isOverlayRequired": "true",
                 "OCREngine": "1"
             },
-            timeout=5
+            timeout=12
         )
+        if resp.status_code != 200 or not resp.text.strip():
+            return "MANUAL_REVIEW", f"OCR Server busy (HTTP {resp.status_code}) -> Sent for manual check.", None
+
         ocr_json = resp.json()
         
         if ocr_json.get("IsErroredOnProcessing"):
@@ -124,7 +125,7 @@ def analyze_screenshot(image_bytes, expected_amount):
             return "AUTO_REJECT", "Ye payment screenshot nahi hai (Koi text nahi mila).", None
 
         # 1. Payment Keywords Check
-        payment_keywords = ["transaction", "paid to", "upi", "successful", "utr", "payment", "debited", "credited", "bharatpe", "phonepe", "gpay", "paytm"]
+        payment_keywords = ["transaction", "paid to", "upi", "successful", "success", "utr", "payment", "debited", "credited", "bharatpe", "phonepe", "gpay", "paytm", "mobikwik"]
         if not any(re.search(rf'\b{kw}\b', full_text) for kw in payment_keywords):
             return "AUTO_REJECT", "Ye valid UPI payment screenshot nahi hai.", None
 
@@ -144,7 +145,7 @@ def analyze_screenshot(image_bytes, expected_amount):
         if not any(pat in full_text for pat in amt_patterns):
             return "AUTO_REJECT", f"Amount ₹{amt_int} match nahi hua.", None
 
-        # 4. Smart Date Check (Today -> OK | Old Date -> Reject | Hidden Date -> Check UTR)
+        # 4. Flexible Date Check (MobiKwik '26 format bhi included!)
         ist = timezone(timedelta(hours=5, minutes=30))
         now_ist = datetime.now(ist)
         d0, d1 = now_ist.strftime("%d"), str(now_ist.day)
@@ -152,32 +153,37 @@ def analyze_screenshot(image_bytes, expected_amount):
         y4, y2 = now_ist.strftime("%Y"), now_ist.strftime("%y")
 
         valid_dates = [
-            f"{d0} {m_abbr} {y4}", f"{d1} {m_abbr} {y4}", f"{d0} {m_full} {y4}", f"{d1} {m_full} {y4}",
-            f"{m_abbr} {d0}, {y4}", f"{m_abbr} {d1}, {y4}", f"{d0}/{m_num}/{y4}", f"{d0}-{m_num}-{y4}",
+            f"{d0} {m_abbr} {y4}", f"{d1} {m_abbr} {y4}",
+            f"{d0} {m_abbr} '{y2}", f"{d1} {m_abbr} '{y2}",
+            f"{d0} {m_abbr} {y2}", f"{d1} {m_abbr} {y2}",
+            f"{d0} {m_full} {y4}", f"{d1} {m_full} {y4}",
+            f"{m_abbr} {d0}, {y4}", f"{m_abbr} {d1}, {y4}",
+            f"{d0}/{m_num}/{y4}", f"{d0}-{m_num}-{y4}",
             f"{d0}/{m_num}/{y2}", f"{d0}-{m_num}-{y2}"
         ]
         
         has_today_date = any(dt in full_text for dt in valid_dates)
         if not has_today_date:
-            any_other_date = re.search(r'\b(\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+20\d{2}|\d{1,2}[/-]\d{1,2}[/-]20\d{2})\b', full_text)
+            any_other_date = re.search(r'\b(\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+[\']?\d{2,4}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b', full_text)
             if any_other_date:
                 return "AUTO_REJECT", f"Purani/galat date ({any_other_date.group(0)}) mili.", None
 
-        # 5. UTR Check (Agar Date hidden hai par UTR visible hai, toh Auto-Approve ke liye aage badhega!)
+        # 5. UTR ya Time-Amount Fingerprint Lock (Repeat Screenshot Rokne Ke Liye)
         utr_matches = re.findall(r'\b\d{12}\b', full_text)
         utr_number = next(iter(utr_matches), None)
-        if not utr_number:
-            if not has_today_date:
-                return "MANUAL_REVIEW", "Screenshot mein Date aur UTR hidden hain -> Manual check required.", None
-            return "MANUAL_REVIEW", "12-digit UTR clearly read nahi hua.", None
 
-        # 6. Time Gap Check (Sirf tab check karein jab date screen par dikh rahi ho)
+        if not has_today_date and not utr_number:
+            return "MANUAL_REVIEW", "Date aur UTR dono hidden hain -> Manual check required.", None
+
+        time_tag = "notime"
         if has_today_date:
-            time_ok, time_msg = check_time_gap(full_text, now_ist)
+            time_ok, time_msg, time_tag = check_time_gap(full_text, now_ist)
             if not time_ok:
                 return "MANUAL_REVIEW", time_msg, utr_number
 
-        # 7. Anti-AI Row Alignment Check
+        unique_lock_key = utr_number if utr_number else f"{d0}-{m_num}-{y4}_{time_tag}_{amt_int}"
+
+        # 6. Anti-AI Row Alignment Check
         overlay_lines = first_res.get("TextOverlay", {}).get("Lines", [])
         line_boxes = []
         for ln in overlay_lines:
@@ -190,8 +196,8 @@ def analyze_screenshot(image_bytes, expected_amount):
             avg_top = sum(tops) / len(tops)
             avg_h = sum(heights) / len(heights)
             if max(tops) - min(tops) > 4.5:
-                if any(pat in txt.lower() for pat in amt_patterns) or utr_number in txt.lower():
-                    return "MANUAL_REVIEW", f"Misaligned digits detected in '{txt}'.", utr_number
+                if any(pat in txt.lower() for pat in amt_patterns) or (utr_number and utr_number in txt.lower()):
+                    return "MANUAL_REVIEW", f"Misaligned digits detected in '{txt}'.", unique_lock_key
             line_boxes.append({"text": txt, "lower": txt.lower(), "top": avg_top, "height": avg_h})
 
         for lb in line_boxes:
@@ -200,9 +206,9 @@ def analyze_screenshot(image_bytes, expected_amount):
                 peers = [o for o in line_boxes if o != lb and (lb["height"] * 0.8) > abs(o["top"] - lb["top"])]
                 for p in peers:
                     if abs(p["top"] - lb["top"]) > 5.0:
-                        return "MANUAL_REVIEW", f"Amount '{lb['text']}' row alignment mismatch.", utr_number
+                        return "MANUAL_REVIEW", f"Amount '{lb['text']}' row alignment mismatch.", unique_lock_key
 
-        return "AUTO_APPROVE", "Verified: Tanu Das/UPI, Exact Amount, Valid UTR & Alignment OK.", utr_number
+        return "AUTO_APPROVE", "Verified: Tanu Das/UPI, Amount, Date/Time & Unique Lock OK.", unique_lock_key
 
     except Exception as e:
         print(f"Cloud OCR Analysis Error: {e}")
