@@ -93,9 +93,8 @@ def analyze_screenshot(image_bytes, expected_amount):
         if w_orig >= h_orig:
             return "AUTO_REJECT", "Ye mobile payment screenshot nahi hai (Invalid orientation).", None
 
-        # Strict 5-second timeout: 5 sec se zyada kabhi nahi rukega
         resp = requests.post(
-            "https://api.ocr.space/parse/image",
+            "https://ocr.space",
             files={"file": ("receipt.jpg", image_bytes, "image/jpeg")},
             data={
                 "apikey": OCR_API_KEY,
@@ -124,20 +123,28 @@ def analyze_screenshot(image_bytes, expected_amount):
         if not full_text:
             return "AUTO_REJECT", "Ye payment screenshot nahi hai (Koi text nahi mila).", None
 
-        # LAYER 1: INSTANT AUTO-REJECT (Payment Keywords + Name + Amount + Date)
+        # 1. Payment Keywords Check
         payment_keywords = ["transaction", "paid to", "upi", "successful", "utr", "payment", "debited", "credited", "bharatpe", "phonepe", "gpay", "paytm"]
         if not any(re.search(rf'\b{kw}\b', full_text) for kw in payment_keywords):
             return "AUTO_REJECT", "Ye valid UPI payment screenshot nahi hai.", None
 
-        if EXPECTED_RECEIVER_NAME not in full_text and "tanu" not in full_text:
-            return "AUTO_REJECT", "Receiver name 'Tanu Das' nahi mila.", None
+        # 2. Receiver Name ya Official UPI ID Check
+        has_receiver = (
+            EXPECTED_RECEIVER_NAME in full_text 
+            or "tanu" in full_text 
+            or "bharatpe2z0d0g3u4z52337" in full_text
+        )
+        if not has_receiver:
+            return "AUTO_REJECT", "Receiver name 'Tanu Das' ya official UPI ID nahi mila.", None
 
+        # 3. Exact Amount Check
         amt_float = float(expected_amount)
         amt_int = int(amt_float)
         amt_patterns = [str(amt_int), f"{amt_float:.2f}", f"{amt_float:.1f}"]
         if not any(pat in full_text for pat in amt_patterns):
             return "AUTO_REJECT", f"Amount ₹{amt_int} match nahi hua.", None
 
+        # 4. Smart Date Check (Today -> OK | Old Date -> Reject | Hidden Date -> Check UTR)
         ist = timezone(timedelta(hours=5, minutes=30))
         now_ist = datetime.now(ist)
         d0, d1 = now_ist.strftime("%d"), str(now_ist.day)
@@ -145,25 +152,32 @@ def analyze_screenshot(image_bytes, expected_amount):
         y4, y2 = now_ist.strftime("%Y"), now_ist.strftime("%y")
 
         valid_dates = [
-            f"{d0} {m_abbr} {y4}", f"{d1} {m_abbr} {y4}",
-            f"{d0} {m_full} {y4}", f"{d1} {m_full} {y4}",
-            f"{m_abbr} {d0}, {y4}", f"{m_abbr} {d1}, {y4}",
-            f"{d0}/{m_num}/{y4}", f"{d0}-{m_num}-{y4}",
+            f"{d0} {m_abbr} {y4}", f"{d1} {m_abbr} {y4}", f"{d0} {m_full} {y4}", f"{d1} {m_full} {y4}",
+            f"{m_abbr} {d0}, {y4}", f"{m_abbr} {d1}, {y4}", f"{d0}/{m_num}/{y4}", f"{d0}-{m_num}-{y4}",
             f"{d0}/{m_num}/{y2}", f"{d0}-{m_num}-{y2}"
         ]
-        if not any(dt in full_text for dt in valid_dates):
-            return "AUTO_REJECT", f"Date aaj ki ({d0} {m_abbr.title()} {y4}) nahi hai.", None
+        
+        has_today_date = any(dt in full_text for dt in valid_dates)
+        if not has_today_date:
+            any_other_date = re.search(r'\b(\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+20\d{2}|\d{1,2}[/-]\d{1,2}[/-]20\d{2})\b', full_text)
+            if any_other_date:
+                return "AUTO_REJECT", f"Purani/galat date ({any_other_date.group(0)}) mili.", None
 
-        # LAYER 2: MANUAL REVIEW CHECKS (UTR, Time Gap > 2 Hrs, Row Alignment)
+        # 5. UTR Check (Agar Date hidden hai par UTR visible hai, toh Auto-Approve ke liye aage badhega!)
         utr_matches = re.findall(r'\b\d{12}\b', full_text)
         utr_number = next(iter(utr_matches), None)
         if not utr_number:
+            if not has_today_date:
+                return "MANUAL_REVIEW", "Screenshot mein Date aur UTR hidden hain -> Manual check required.", None
             return "MANUAL_REVIEW", "12-digit UTR clearly read nahi hua.", None
 
-        time_ok, time_msg = check_time_gap(full_text, now_ist)
-        if not time_ok:
-            return "MANUAL_REVIEW", time_msg, utr_number
+        # 6. Time Gap Check (Sirf tab check karein jab date screen par dikh rahi ho)
+        if has_today_date:
+            time_ok, time_msg = check_time_gap(full_text, now_ist)
+            if not time_ok:
+                return "MANUAL_REVIEW", time_msg, utr_number
 
+        # 7. Anti-AI Row Alignment Check
         overlay_lines = first_res.get("TextOverlay", {}).get("Lines", [])
         line_boxes = []
         for ln in overlay_lines:
@@ -188,7 +202,7 @@ def analyze_screenshot(image_bytes, expected_amount):
                     if abs(p["top"] - lb["top"]) > 5.0:
                         return "MANUAL_REVIEW", f"Amount '{lb['text']}' row alignment mismatch.", utr_number
 
-        return "AUTO_APPROVE", "Verified: Tanu Das, Amount, Today's Date, <=2hr Time & Alignment OK.", utr_number
+        return "AUTO_APPROVE", "Verified: Tanu Das/UPI, Exact Amount, Valid UTR & Alignment OK.", utr_number
 
     except Exception as e:
         print(f"Cloud OCR Analysis Error: {e}")
@@ -280,7 +294,7 @@ def start_payment(message):
                 f"📌 *Official UPI ID:* `{UPI_ID}`\n\n"
                 "💎 *INSTRUCTIONS:*\n"
                 "1️⃣ *Scan QR or pay via UPI ID.*\n"
-                "2️⃣ *Click below & send Payment Screenshot for automatic verification.*"
+                "2️⃣ *Open 'View Details' (so Date & UTR are visible) and send Screenshot below.*"
             )
             
             markup = InlineKeyboardMarkup()
