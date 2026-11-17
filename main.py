@@ -4,11 +4,10 @@ import secrets
 import os
 import io
 import re
+import requests
 from datetime import datetime, timezone, timedelta
 import qrcode
-import numpy as np
-import cv2
-from rapidocr_onnxruntime import RapidOCR
+from PIL import Image
 from flask import Flask
 from threading import Thread
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -21,12 +20,14 @@ ADMIN_ID = 8393210427
 UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
 BOT_USERNAME = "SkyBoxx_bot"
 
+# Yahan apni free OCR.space API key dalein (default "helloworld" test ke liye hai)
+OCR_API_KEY = "helloworld"
+
 EXPECTED_RECEIVER_NAME = "tanu das"
 MAX_TIME_GAP_MINUTES = 120
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = Flask('')
-ocr_engine = RapidOCR()
 
 # =====================================================================
 # 📦 STEP 2: REGISTER CACHES & PERMANENT TELE-FORWARD DATABASE
@@ -48,7 +49,7 @@ saved_links = {
 } 
 
 # =====================================================================
-# 📦 STEP 3: ULTRA-FAST 1-SEC FILTER & ANTI-EDIT OCR ENGINE
+# 📦 STEP 3: 1-SECOND CLOUD OCR, TIME GAP & ALIGNMENT ENGINE
 # =====================================================================
 def generate_upi_qr(upi_id, amount):
     upi_url = f"upi://pay?pa={upi_id}&am={amount}&cu=INR"
@@ -87,55 +88,37 @@ def check_time_gap(full_text, now_ist):
 
 def analyze_screenshot(image_bytes, expected_amount):
     try:
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        if img is None:
-            return "AUTO_REJECT", "Corrupted or invalid image file.", None
-
-        h_orig, w_orig = img.shape[:2]
-
-        # 0. INSTANT CHECK (0.01 sec): Payment screenshot hamesha vertical (portrait) hota hai
+        # 0. Instant Orientation Check (0.01s)
+        pil_img = Image.open(io.BytesIO(image_bytes))
+        w_orig, h_orig = pil_img.size
         if w_orig >= h_orig:
             return "AUTO_REJECT", "Ye mobile payment screenshot nahi hai (Invalid orientation).", None
 
-        # 1. ULTRA-FAST RESIZE (540px width -> 1-2 sec mein scan hoga, RAM bhi safe rahega)
-        target_w = 540
-        if w_orig > target_w:
-            scale = float(target_w) / w_orig
-            img = cv2.resize(img, (target_w, int(h_orig * scale)), interpolation=cv2.INTER_AREA)
+        # 1. Fast Cloud OCR Call (1-2 seconds response)
+        resp = requests.post(
+            "https://ocr.space",
+            files={"file": ("receipt.jpg", image_bytes, "image/jpeg")},
+            data={
+                "apikey": OCR_API_KEY,
+                "language": "eng",
+                "isOverlayRequired": "true",
+                "OCREngine": "2"
+            },
+            timeout=10
+        )
+        ocr_json = resp.json()
+        parsed_results = ocr_json.get("ParsedResults") or []
+        if not parsed_results:
+            return "MANUAL_REVIEW", "OCR server busy -> Sent for manual check.", None
 
-        img_h, img_w, _ = img.shape
-        result, _ = ocr_engine(img, use_cls=False)
-        
-        if not result:
+        first_res = next(iter(parsed_results))
+        raw_text = first_res.get("ParsedText", "")
+        full_text = " ".join(raw_text.lower().split())
+
+        if not full_text:
             return "AUTO_REJECT", "Ye payment screenshot nahi hai (Koi text nahi mila).", None
 
-        # 2. INSTANT SPAM/LOG BLOCK: Payment receipt mein 45 se zyada text lines nahi hoti
-        if len(result) > 45:
-            return "AUTO_REJECT", "Ye valid payment receipt nahi hai (Too much non-payment text).", None
-
-        lines = []
-        for item in result:
-            box, text_raw, conf_raw = item
-            text = str(text_raw).strip()
-            conf = float(conf_raw)
-            p0, p1, p2, p3 = box
-            y_top = (p0 + p1) / 2.0
-            y_bottom = (p2 + p3) / 2.0
-            y_center = (y_top + y_bottom) / 2.0
-            tilt = abs(p0 - p1)
-            lines.append({
-                "text": text,
-                "lower": text.lower(),
-                "conf": conf,
-                "y_center": y_center,
-                "height": abs(y_bottom - y_top),
-                "tilt": tilt
-            })
-
-        full_text = " ".join([l["lower"] for l in lines])
-
-        # LAYER 1: STRICT AUTO-REJECT (Exact Keyword Check + Name + Amount + Date)
+        # LAYER 1: INSTANT AUTO-REJECT (Payment Keywords + Name + Amount + Date)
         payment_keywords = ["transaction", "paid to", "upi", "successful", "utr", "payment", "debited", "credited", "bharatpe", "phonepe", "gpay", "paytm"]
         if not any(re.search(rf'\b{kw}\b', full_text) for kw in payment_keywords):
             return "AUTO_REJECT", "Ye valid UPI payment screenshot nahi hai.", None
@@ -165,7 +148,7 @@ def analyze_screenshot(image_bytes, expected_amount):
         if not any(dt in full_text for dt in valid_dates):
             return "AUTO_REJECT", f"Date aaj ki ({d0} {m_abbr.title()} {y4}) nahi hai.", None
 
-        # LAYER 2: MANUAL REVIEW CHECKS (UTR, Time Gap > 2 Hrs, AI/Alignment)
+        # LAYER 2: MANUAL REVIEW CHECKS (UTR, Time Gap > 2 Hrs, Row Alignment)
         utr_matches = re.findall(r'\b\d{12}\b', full_text)
         utr_number = next(iter(utr_matches), None)
         if not utr_number:
@@ -175,31 +158,37 @@ def analyze_screenshot(image_bytes, expected_amount):
         if not time_ok:
             return "MANUAL_REVIEW", time_msg, utr_number
 
-        for l in lines:
-            is_amount_box = any(pat in l["lower"] for pat in amt_patterns) and ("₹" in l["text"] or l["lower"].isdigit() or "." in l["lower"])
-            is_utr_box = utr_number in l["lower"]
-            is_top_time_box = (img_h * 0.08 >= l["y_center"]) and (":" in l["text"])
+        # Row Alignment Check using OCR Overlay Coordinates
+        overlay_lines = first_res.get("TextOverlay", {}).get("Lines", [])
+        line_boxes = []
+        for ln in overlay_lines:
+            words = ln.get("Words", [])
+            if not words:
+                continue
+            txt = ln.get("LineText", "").strip()
+            tops = [float(w.get("Top", 0)) for w in words]
+            heights = [float(w.get("Height", 10)) for w in words]
+            avg_top = sum(tops) / len(tops)
+            avg_h = sum(heights) / len(heights)
+            # Agar ek hi line ke words mein vertical jump (> 4px) hai toh edited/misaligned hai
+            if max(tops) - min(tops) > 4.5:
+                if any(pat in txt.lower() for pat in amt_patterns) or utr_number in txt.lower():
+                    return "MANUAL_REVIEW", f"Misaligned digits detected in '{txt}'.", utr_number
+            line_boxes.append({"text": txt, "lower": txt.lower(), "top": avg_top, "height": avg_h})
 
-            if is_amount_box or is_utr_box or is_top_time_box:
-                if 0.90 > l["conf"]:
-                    return "MANUAL_REVIEW", f"Possible AI/font edit in '{l['text']}' (Confidence: {l['conf']:.2f}).", utr_number
-                if l["tilt"] > 2.5:
-                    return "MANUAL_REVIEW", f"Misaligned/tilted text in '{l['text']}'.", utr_number
-
+        for lb in line_boxes:
+            is_amount_box = any(pat in lb["lower"] for pat in amt_patterns) and ("₹" in lb["text"] or lb["lower"].isdigit() or "." in lb["lower"])
             if is_amount_box:
-                same_row_boxes = [
-                    other for other in lines 
-                    if other != l and (l["height"] * 0.8) > abs(other["y_center"] - l["y_center"])
-                ]
-                for peer in same_row_boxes:
-                    if abs(peer["y_center"] - l["y_center"]) > 5.0:
-                        return "MANUAL_REVIEW", f"Amount '{l['text']}' row alignment mismatch.", utr_number
+                peers = [o for o in line_boxes if o != lb and (lb["height"] * 0.8) > abs(o["top"] - lb["top"])]
+                for p in peers:
+                    if abs(p["top"] - lb["top"]) > 5.0:
+                        return "MANUAL_REVIEW", f"Amount '{lb['text']}' row alignment mismatch.", utr_number
 
         return "AUTO_APPROVE", "Verified: Tanu Das, Amount, Today's Date, <=2hr Time & Alignment OK.", utr_number
 
     except Exception as e:
-        print(f"Analysis Error: {e}")
-        return "MANUAL_REVIEW", "Verification engine error -> Sent for manual check.", None
+        print(f"Cloud OCR Analysis Error: {e}")
+        return "MANUAL_REVIEW", "Verification timeout/error -> Sent for manual check.", None
 
 @app.route('/')
 def home():
