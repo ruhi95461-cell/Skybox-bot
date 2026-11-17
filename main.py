@@ -252,7 +252,56 @@ def start_payment(message):
         msg_text = message.text.strip()
         parts = msg_text.split()
         
-        if msg_text == "/start" or len(parts) 𝗣𝗔𝗬𝗠𝗘𝗡𝗧 𝗩𝗘𝗥𝗜𝗙𝗜𝗖𝗔𝗧𝗜𝗢𝗡</b>\n"
+        if msg_text == "/start" or len(parts) in (0, 1):
+            bot.reply_to(message, "👋 *Welcome to SkyBox Premium Portal!*\n\n*Kindly click on a valid product checkout link to unlock your premium contents immediately.*", parse_mode="Markdown")
+            return
+            
+        _, raw_token = parts
+        token = raw_token.strip()
+        
+        if token in saved_links:
+            exact_amount = saved_links[token]["amount"]
+            qr_img = generate_upi_qr(UPI_ID, exact_amount)
+            
+            caption_text = (
+                "⚡ *SKYBOX PREMIUM CHECKOUT* ⚡\n\n"
+                f"💰 *Pay Exact Amount:* `₹{exact_amount}`\n"
+                f"📌 *Official UPI ID:* `{UPI_ID}`\n\n"
+                "💎 *INSTRUCTIONS:*\n"
+                "1️⃣ *Scan QR or pay via UPI ID.*\n"
+                "2️⃣ *Click below & send Payment Screenshot for automatic verification.*"
+            )
+            
+            markup = InlineKeyboardMarkup()
+            submit_btn = InlineKeyboardButton("✅ Paid? Send Screenshot", callback_data=f"sub_scr:{token}:{exact_amount}")
+            markup.add(submit_btn)
+            
+            bot.send_photo(chat_id, qr_img, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
+        else:
+            bot.reply_to(message, "❌ *System Alert: The checkout link you used is either invalid or has expired!*", parse_mode="Markdown")
+    except Exception as e:
+        print(f"Start Error: {e}")
+
+used_utrs = set()
+
+def format_user_identity(user):
+    uid = user.id
+    fname = (user.first_name or "Customer").replace("*", "").replace("_", "").replace("[", "").replace("]", "")
+    uname = f"@{user.username}" if user.username else "Not Set"
+    profile_link = f"[{fname}](tg://user?id={uid})"
+    return f"{profile_link} (`{uid}`)\n🆔 *Username:* {uname}"
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('sub_scr:'))
+def ask_for_screenshot(call):
+    try:
+        chat_id = call.message.chat.id
+        _, token, amount = call.data.split(':')
+        
+        bot.answer_callback_query(call.id)
+        
+        prompt_msg = bot.send_message(
+            chat_id,
+            "📸 <b>𝗣𝗔𝗬𝗠𝗘𝗡𝗧 𝗩𝗘𝗥𝗜𝗙𝗜𝗖𝗔𝗧𝗜𝗢𝗡</b>\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
             "🧾 <i>Please upload your <b>Payment Screenshot</b> below to unlock your content instantly.</i>\n\n"
             "⚡ <b>Status:</b> <code>Waiting for Photo...</code>",
