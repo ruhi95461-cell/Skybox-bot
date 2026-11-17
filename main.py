@@ -94,7 +94,7 @@ def analyze_screenshot(image_bytes, expected_amount):
             return "AUTO_REJECT", "Ye mobile payment screenshot nahi hai (Invalid orientation).", None
 
         resp = requests.post(
-            "https://ocr.space",
+            "https://api.ocr.space/parse/image",
             files={"file": ("receipt.jpg", image_bytes, "image/jpeg")},
             data={
                 "apikey": OCR_API_KEY,
