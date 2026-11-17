@@ -49,7 +49,7 @@ saved_links = {
 } 
 
 # =====================================================================
-# 📦 STEP 3: 1-SECOND CLOUD OCR, TIME GAP & ALIGNMENT ENGINE
+# 📦 STEP 3: 5-SEC TIMEOUT CLOUD OCR, TIME GAP & ALIGNMENT ENGINE
 # =====================================================================
 def generate_upi_qr(upi_id, amount):
     upi_url = f"upi://pay?pa={upi_id}&am={amount}&cu=INR"
@@ -88,13 +88,12 @@ def check_time_gap(full_text, now_ist):
 
 def analyze_screenshot(image_bytes, expected_amount):
     try:
-        # 0. Instant Orientation Check (0.01s)
         pil_img = Image.open(io.BytesIO(image_bytes))
         w_orig, h_orig = pil_img.size
         if w_orig >= h_orig:
             return "AUTO_REJECT", "Ye mobile payment screenshot nahi hai (Invalid orientation).", None
 
-        # 1. Fast Cloud OCR Call (1-2 seconds response)
+        # Strict 5-second timeout: 5 sec se zyada kabhi nahi rukega
         resp = requests.post(
             "https://ocr.space",
             files={"file": ("receipt.jpg", image_bytes, "image/jpeg")},
@@ -104,16 +103,23 @@ def analyze_screenshot(image_bytes, expected_amount):
                 "isOverlayRequired": "true",
                 "OCREngine": "2"
             },
-            timeout=10
+            timeout=5
         )
         ocr_json = resp.json()
+        
+        if ocr_json.get("IsErroredOnProcessing"):
+            err_msg = str(ocr_json.get("ErrorMessage", "API Key/OCR Error"))
+            print(f"OCR API Error: {err_msg}")
+            return "MANUAL_REVIEW", f"OCR API Alert ({err_msg}) -> Sent for manual check.", None
+
         parsed_results = ocr_json.get("ParsedResults") or []
         if not parsed_results:
-            return "MANUAL_REVIEW", "OCR server busy -> Sent for manual check.", None
+            return "MANUAL_REVIEW", "OCR server empty response -> Sent for manual check.", None
 
         first_res = next(iter(parsed_results))
         raw_text = first_res.get("ParsedText", "")
         full_text = " ".join(raw_text.lower().split())
+        print("OCR TEXT:", full_text)
 
         if not full_text:
             return "AUTO_REJECT", "Ye payment screenshot nahi hai (Koi text nahi mila).", None
@@ -158,7 +164,6 @@ def analyze_screenshot(image_bytes, expected_amount):
         if not time_ok:
             return "MANUAL_REVIEW", time_msg, utr_number
 
-        # Row Alignment Check using OCR Overlay Coordinates
         overlay_lines = first_res.get("TextOverlay", {}).get("Lines", [])
         line_boxes = []
         for ln in overlay_lines:
@@ -170,7 +175,6 @@ def analyze_screenshot(image_bytes, expected_amount):
             heights = [float(w.get("Height", 10)) for w in words]
             avg_top = sum(tops) / len(tops)
             avg_h = sum(heights) / len(heights)
-            # Agar ek hi line ke words mein vertical jump (> 4px) hai toh edited/misaligned hai
             if max(tops) - min(tops) > 4.5:
                 if any(pat in txt.lower() for pat in amt_patterns) or utr_number in txt.lower():
                     return "MANUAL_REVIEW", f"Misaligned digits detected in '{txt}'.", utr_number
@@ -188,7 +192,7 @@ def analyze_screenshot(image_bytes, expected_amount):
 
     except Exception as e:
         print(f"Cloud OCR Analysis Error: {e}")
-        return "MANUAL_REVIEW", "Verification timeout/error -> Sent for manual check.", None
+        return "MANUAL_REVIEW", f"OCR Timeout/Error ({e}) -> Sent for manual check.", None
 
 @app.route('/')
 def home():
