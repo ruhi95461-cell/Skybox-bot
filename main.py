@@ -76,7 +76,7 @@ def check_time_gap(full_text, now_ist):
             receipt_dt = now_ist.replace(hour=hr, minute=mn, second=0, microsecond=0)
             diff_minutes = (now_ist - receipt_dt).total_seconds() / 60.0
             
-            if diff_minutes < -5:
+            if diff_minutes + 5 <= 0:
                 return False, f"Receipt time ({hr_str}:{min_str} {meridiem.upper()}) current time se aage hai."
             if diff_minutes > MAX_TIME_GAP_MINUTES:
                 hrs_gap = round(diff_minutes / 60, 1)
@@ -92,6 +92,12 @@ def analyze_screenshot(image_bytes, expected_amount):
         if img is None:
             return "AUTO_REJECT", "Corrupted or invalid image file.", None
 
+        # Fast Speed Boost: 800px width resize (OCR 2-3 sec mein complete hoga)
+        h_orig, w_orig = img.shape[:2]
+        if w_orig > 800:
+            scale = 800.0 / w_orig
+            img = cv2.resize(img, (800, int(h_orig * scale)), interpolation=cv2.INTER_AREA)
+
         img_h, img_w, _ = img.shape
         result, _ = ocr_engine(img)
         if not result:
@@ -103,10 +109,10 @@ def analyze_screenshot(image_bytes, expected_amount):
             text = str(text_raw).strip()
             conf = float(conf_raw)
             p0, p1, p2, p3 = box
-            y_top = (p0[1] + p1[1]) / 2.0
-            y_bottom = (p2[1] + p3[1]) / 2.0
+            y_top = (p0 + p1) / 2.0
+            y_bottom = (p2 + p3) / 2.0
             y_center = (y_top + y_bottom) / 2.0
-            tilt = abs(p0[1] - p1[1])
+            tilt = abs(p0 - p1)
             lines.append({
                 "text": text,
                 "lower": text.lower(),
@@ -118,10 +124,10 @@ def analyze_screenshot(image_bytes, expected_amount):
 
         full_text = " ".join([l["lower"] for l in lines])
 
-        # LAYER 1: STRICT AUTO-REJECT
-        payment_keywords = ["transaction", "paid to", "upi", "successful", "utr", "payment", "debited", "credited"]
-        if not any(kw in full_text for kw in payment_keywords):
-            return "AUTO_REJECT", "Ye valid UPI payment screenshot nahi hai (Random image).", None
+        # LAYER 1: STRICT AUTO-REJECT (Exact Keyword Check + Name + Amount + Date)
+        payment_keywords = ["transaction", "paid to", "upi", "successful", "utr", "payment", "debited", "credited", "bharatpe", "phonepe", "gpay", "paytm"]
+        if not any(re.search(rf'\b{kw}\b', full_text) for kw in payment_keywords):
+            return "AUTO_REJECT", "Ye valid UPI payment screenshot nahi hai.", None
 
         if EXPECTED_RECEIVER_NAME not in full_text and "tanu" not in full_text:
             return "AUTO_REJECT", "Receiver name 'Tanu Das' nahi mila.", None
@@ -148,7 +154,7 @@ def analyze_screenshot(image_bytes, expected_amount):
         if not any(dt in full_text for dt in valid_dates):
             return "AUTO_REJECT", f"Date aaj ki ({d0} {m_abbr.title()} {y4}) nahi hai.", None
 
-        # LAYER 2: MANUAL REVIEW CHECKS
+        # LAYER 2: MANUAL REVIEW CHECKS (UTR, Time Gap > 2 Hrs, AI/Alignment)
         utr_matches = re.findall(r'\b\d{12}\b', full_text)
         utr_number = next(iter(utr_matches), None)
         if not utr_number:
@@ -161,10 +167,10 @@ def analyze_screenshot(image_bytes, expected_amount):
         for l in lines:
             is_amount_box = any(pat in l["lower"] for pat in amt_patterns) and ("₹" in l["text"] or l["lower"].isdigit() or "." in l["lower"])
             is_utr_box = utr_number in l["lower"]
-            is_top_time_box = (l["y_center"] < img_h * 0.08) and (":" in l["text"])
+            is_top_time_box = (img_h * 0.08 >= l["y_center"]) and (":" in l["text"])
 
             if is_amount_box or is_utr_box or is_top_time_box:
-                if l["conf"] < 0.92:
+                if 0.92 > l["conf"]:
                     return "MANUAL_REVIEW", f"Possible AI/font edit in '{l['text']}' (Confidence: {l['conf']:.2f}).", utr_number
                 if l["tilt"] > 2.5:
                     return "MANUAL_REVIEW", f"Misaligned/tilted text in '{l['text']}'.", utr_number
@@ -172,7 +178,7 @@ def analyze_screenshot(image_bytes, expected_amount):
             if is_amount_box:
                 same_row_boxes = [
                     other for other in lines 
-                    if other != l and abs(other["y_center"] - l["y_center"]) < (l["height"] * 0.8)
+                    if other != l and (l["height"] * 0.8) > abs(other["y_center"] - l["y_center"])
                 ]
                 for peer in same_row_boxes:
                     if abs(peer["y_center"] - l["y_center"]) > 5.0:
@@ -195,6 +201,7 @@ def run():
 def keep_alive():
     t = Thread(target=run)
     t.start()
+
 # =====================================================================
 # 📦 STEP 4: TELEGRAM ADMIN COMMANDS & HANDLERS
 # =====================================================================
