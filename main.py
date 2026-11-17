@@ -21,7 +21,7 @@ UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
 BOT_USERNAME = "SkyBoxx_bot"
 
 # Yahan apni free OCR.space API key dalein (default "helloworld" test ke liye hai)
-OCR_API_KEY = "helloworld"
+OCR_API_KEY = "K8822071071352488957"
 
 EXPECTED_RECEIVER_NAME = "tanu das"
 MAX_TIME_GAP_MINUTES = 120
