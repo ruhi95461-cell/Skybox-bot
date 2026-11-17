@@ -48,7 +48,7 @@ saved_links = {
 } 
 
 # =====================================================================
-# 📦 STEP 3: HELPER FUNCTIONS, TIME GAP & ANTI-EDIT OCR ENGINE
+# 📦 STEP 3: ULTRA-FAST 1-SEC FILTER & ANTI-EDIT OCR ENGINE
 # =====================================================================
 def generate_upi_qr(upi_id, amount):
     upi_url = f"upi://pay?pa={upi_id}&am={amount}&cu=INR"
@@ -92,16 +92,27 @@ def analyze_screenshot(image_bytes, expected_amount):
         if img is None:
             return "AUTO_REJECT", "Corrupted or invalid image file.", None
 
-        # Fast Speed Boost: 800px width resize (OCR 2-3 sec mein complete hoga)
         h_orig, w_orig = img.shape[:2]
-        if w_orig > 800:
-            scale = 800.0 / w_orig
-            img = cv2.resize(img, (800, int(h_orig * scale)), interpolation=cv2.INTER_AREA)
+
+        # 0. INSTANT CHECK (0.01 sec): Payment screenshot hamesha vertical (portrait) hota hai
+        if w_orig >= h_orig:
+            return "AUTO_REJECT", "Ye mobile payment screenshot nahi hai (Invalid orientation).", None
+
+        # 1. ULTRA-FAST RESIZE (540px width -> 1-2 sec mein scan hoga, RAM bhi safe rahega)
+        target_w = 540
+        if w_orig > target_w:
+            scale = float(target_w) / w_orig
+            img = cv2.resize(img, (target_w, int(h_orig * scale)), interpolation=cv2.INTER_AREA)
 
         img_h, img_w, _ = img.shape
-        result, _ = ocr_engine(img)
+        result, _ = ocr_engine(img, use_cls=False)
+        
         if not result:
-            return "AUTO_REJECT", "Koi text nahi mila (Ye payment screenshot nahi hai).", None
+            return "AUTO_REJECT", "Ye payment screenshot nahi hai (Koi text nahi mila).", None
+
+        # 2. INSTANT SPAM/LOG BLOCK: Payment receipt mein 45 se zyada text lines nahi hoti
+        if len(result) > 45:
+            return "AUTO_REJECT", "Ye valid payment receipt nahi hai (Too much non-payment text).", None
 
         lines = []
         for item in result:
@@ -170,7 +181,7 @@ def analyze_screenshot(image_bytes, expected_amount):
             is_top_time_box = (img_h * 0.08 >= l["y_center"]) and (":" in l["text"])
 
             if is_amount_box or is_utr_box or is_top_time_box:
-                if 0.92 > l["conf"]:
+                if 0.90 > l["conf"]:
                     return "MANUAL_REVIEW", f"Possible AI/font edit in '{l['text']}' (Confidence: {l['conf']:.2f}).", utr_number
                 if l["tilt"] > 2.5:
                     return "MANUAL_REVIEW", f"Misaligned/tilted text in '{l['text']}'.", utr_number
