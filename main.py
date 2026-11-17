@@ -95,13 +95,13 @@ def analyze_screenshot(image_bytes, expected_amount):
 
         # Strict 5-second timeout: 5 sec se zyada kabhi nahi rukega
         resp = requests.post(
-            "https://ocr.space",
+            "https://api.ocr.space/parse/image",
             files={"file": ("receipt.jpg", image_bytes, "image/jpeg")},
             data={
                 "apikey": OCR_API_KEY,
                 "language": "eng",
                 "isOverlayRequired": "true",
-                "OCREngine": "2"
+                "OCREngine": "1"
             },
             timeout=5
         )
@@ -298,7 +298,7 @@ used_utrs = set()
 def format_user_identity(user):
     uid = user.id
     fname = (user.first_name or "Customer").replace("*", "").replace("_", "").replace("[", "").replace("]", "")
-    uname = f"@{user.username}" if user.username else "Not Set"
+    uname = f"@{user.username}".replace("_", "\\_") if user.username else "Not Set"
     profile_link = f"[{fname}](tg://user?id={uid})"
     return f"{profile_link} (`{uid}`)\n🆔 *Username:* {uname}"
 
@@ -523,9 +523,14 @@ def deliver_media(chat_id, token, custom_msg_id):
 # 🚀 STEP 8: MAIN LOOP RUNNER CONTROL
 # =====================================================================
 if __name__ == "__main__":
-    try:
-        keep_alive()
-        print("🚀 SkyBox Forwarder Pro Bot is Running on Render...")
-        bot.infinity_polling(timeout=10, long_polling_timeout=5)
-    except Exception as e:
-        print(f"Loop Crash Restarter: {e}")
+    keep_alive()
+    time.sleep(5)
+    while True:
+        try:
+            bot.remove_webhook()
+            time.sleep(1)
+            print("🚀 SkyBox Forwarder Pro Bot is Running on Render...")
+            bot.infinity_polling(timeout=20, long_polling_timeout=10, skip_pending=True)
+        except Exception as e:
+            print(f"Loop Crash Restarter: {e}")
+            time.sleep(3)
