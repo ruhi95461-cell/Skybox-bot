@@ -22,7 +22,7 @@ UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
 BOT_USERNAME = "SkyBoxx_bot"
 
 EXPECTED_RECEIVER_NAME = "tanu das"
-MAX_TIME_GAP_MINUTES = 120  # 2 ghante tak auto-accept allowed
+MAX_TIME_GAP_MINUTES = 120
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = Flask('')
@@ -99,11 +99,14 @@ def analyze_screenshot(image_bytes, expected_amount):
 
         lines = []
         for item in result:
-            box, text, conf = item[0], item[1].strip(), float(item[2])
-            y_top = (box[0][1] + box[1][1]) / 2.0
-            y_bottom = (box[2][1] + box[3][1]) / 2.0
+            box, text_raw, conf_raw = item
+            text = str(text_raw).strip()
+            conf = float(conf_raw)
+            p0, p1, p2, p3 = box
+            y_top = (p0[1] + p1[1]) / 2.0
+            y_bottom = (p2[1] + p3[1]) / 2.0
             y_center = (y_top + y_bottom) / 2.0
-            tilt = abs(box[0][1] - box[1][1])
+            tilt = abs(p0[1] - p1[1])
             lines.append({
                 "text": text,
                 "lower": text.lower(),
@@ -115,7 +118,7 @@ def analyze_screenshot(image_bytes, expected_amount):
 
         full_text = " ".join([l["lower"] for l in lines])
 
-        # LAYER 1: STRICT AUTO-REJECT (Fake Image, Receiver Name, Amount, Today's Date)
+        # LAYER 1: STRICT AUTO-REJECT
         payment_keywords = ["transaction", "paid to", "upi", "successful", "utr", "payment", "debited", "credited"]
         if not any(kw in full_text for kw in payment_keywords):
             return "AUTO_REJECT", "Ye valid UPI payment screenshot nahi hai (Random image).", None
@@ -145,9 +148,9 @@ def analyze_screenshot(image_bytes, expected_amount):
         if not any(dt in full_text for dt in valid_dates):
             return "AUTO_REJECT", f"Date aaj ki ({d0} {m_abbr.title()} {y4}) nahi hai.", None
 
-        # LAYER 2: MANUAL REVIEW CHECKS (UTR, Time Gap > 2 Hrs, AI/Alignment)
+        # LAYER 2: MANUAL REVIEW CHECKS
         utr_matches = re.findall(r'\b\d{12}\b', full_text)
-        utr_number = utr_matches[0] if utr_matches else None
+        utr_number = next(iter(utr_matches), None)
         if not utr_number:
             return "MANUAL_REVIEW", "12-digit UTR clearly read nahi hua.", None
 
@@ -192,7 +195,6 @@ def run():
 def keep_alive():
     t = Thread(target=run)
     t.start()
-
 # =====================================================================
 # 📦 STEP 4: TELEGRAM ADMIN COMMANDS & HANDLERS
 # =====================================================================
@@ -207,7 +209,8 @@ def generate_link(message):
         return
         
     try:
-        amount = round(float(args[1]), 2)
+        _, raw_amt = args
+        amount = round(float(raw_amt), 2)
     except ValueError:
         bot.reply_to(message, "❌ *System Alert: Invalid Numeric Amount!*", parse_mode="Markdown")
         return
@@ -218,7 +221,7 @@ def generate_link(message):
             return
         
     unique_token = secrets.token_hex(6)
-    user_link = f"https://t.me/{BOT_USERNAME}?start={unique_token}"
+    user_link = f"https://t.me{BOT_USERNAME}?start={unique_token}"
     
     structure_text = (
         f"👑 *Gateway Forwarder Link Generated!* 👑\n\n"
@@ -247,8 +250,9 @@ def start_payment(message):
     try:
         chat_id = message.chat.id
         msg_text = message.text.strip()
+        parts = msg_text.split()
         
-        if msg_text == "/start" or len(msg_text.split()) 𝗣𝗔𝗬𝗠𝗘𝗡𝗧 𝗩𝗘𝗥𝗜𝗙𝗜𝗖𝗔𝗧𝗜𝗢𝗡</b>\n"
+        if msg_text == "/start" or len(parts) 𝗣𝗔𝗬𝗠𝗘𝗡𝗧 𝗩𝗘𝗥𝗜𝗙𝗜𝗖𝗔𝗧𝗜𝗢𝗡</b>\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
             "🧾 <i>Please upload your <b>Payment Screenshot</b> below to unlock your content instantly.</i>\n\n"
             "⚡ <b>Status:</b> <code>Waiting for Photo...</code>",
@@ -364,13 +368,10 @@ def handle_admin_decision(call):
             bot.answer_callback_query(call.id, "❌ Not Authorized!", show_alert=True)
             return
             
-        action_parts = call.data.split(':')
-        action = action_parts[0]
-        target_user_id = int(action_parts[1])
-        token = action_parts[2]
-        prompt_msg_id = int(action_parts[3])
-        status_msg_id = int(action_parts[4])
-        utr_val = action_parts[5] if len(action_parts) > 5 else "none"
+        action, uid_str, token, p_id_str, s_id_str, utr_val = call.data.split(':')
+        target_user_id = int(uid_str)
+        prompt_msg_id = int(p_id_str)
+        status_msg_id = int(s_id_str)
         
         if action == "adm_app":
             if utr_val != "none":
