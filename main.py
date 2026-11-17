@@ -23,7 +23,6 @@ app = Flask('')
 # =====================================================================
 # 📦 STEP 2: REGISTER CACHES & PERMANENT TELE-FORWARD DATABASE
 # =====================================================================
-# Hardcoded links aur products details
 saved_links = {
     "585f5f2f9ec1": {"amount": 55.00, "channel_id": "-1004389531080"}, 
     "86fb9961877b": {"amount": 54.00, "channel_id": "-1004340284198"},
@@ -114,7 +113,7 @@ def generate_link(message):
     bot.reply_to(message, structure_text, parse_mode="Markdown")
     
 # =====================================================================
-# 📦 STEP 5: USER CHECKOUT & FLOW PIPELINE (SCREENSHOT VERIFICATION)
+# 📦 STEP 5: USER CHECKOUT & FLOW PIPELINE (AUTOMATIC VERIFICATION)
 # =====================================================================
 @bot.message_handler(commands=['start'])
 def start_payment(message):
@@ -123,7 +122,7 @@ def start_payment(message):
         msg_text = message.text.strip()
         
         if msg_text == "/start" or len(msg_text.split()) < 2:
-            bot.reply_to(message, "👋 *Welcome to SkyBox Premium Portal!*\n\n*Kindly click on a valid product checkout link to unlock your premium contents immediately.*", parse_mode="Markdown")
+            bot.reply_to(message, "👋 *Welcome to SkyBox Premium!*\n\n*Click a valid product link to unlock your content.*", parse_mode="Markdown")
             return
             
         token = msg_text.split()[1].strip()
@@ -133,13 +132,11 @@ def start_payment(message):
             qr_img = generate_upi_qr(UPI_ID, exact_amount)
             
             caption_text = (
-                "⚡ *SKYBOX PREMIUM CHECKOUT* ⚡\n\n"
-                f"💰 *Pay Exact Amount:* `₹{exact_amount}`\n"
-                f"📌 *Official UPI ID:* `{UPI_ID}`\n\n"
-                "💎 *INSTRUCTIONS:*\n"
-                "1️⃣ *Scan the QR code above or copy the official UPI ID.*\n"
-                f"2️⃣ *Pay the exact amount of* `₹{exact_amount}` *carefully.*\n"
-                "3️⃣ *After successful payment, click the button below to submit your Payment Screenshot for manual verification.*"
+                "⚡ *SKYBOX CHECKOUT* ⚡\n\n"
+                f"💰 *Amount:* `₹{exact_amount}`\n"
+                f"📌 *UPI ID:* `{UPI_ID}`\n\n"
+                "1️⃣ *Scan QR or pay via UPI ID.*\n"
+                "2️⃣ *Click below & send Payment Screenshot for automatic verification.*"
             )
             
             markup = InlineKeyboardMarkup()
@@ -148,7 +145,7 @@ def start_payment(message):
             
             bot.send_photo(chat_id, qr_img, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
         else:
-            bot.reply_to(message, "❌ *System Alert: The checkout link you used is either invalid or has expired!*", parse_mode="Markdown")
+            bot.reply_to(message, "❌ *Invalid or expired checkout link!*", parse_mode="Markdown")
     except Exception as e:
         print(f"Start Error: {e}")
 
@@ -162,8 +159,7 @@ def ask_for_screenshot(call):
         
         bot.answer_callback_query(call.id)
         
-        prompt_msg = bot.send_message(chat_id, "📸 *Verification Prompt:*\n\n*Please upload and send the Payment Screenshot (Photo) as a proof here:*", parse_mode="Markdown")
-        # Ab bot text ke bajaye photo/screenshot ka wait karega
+        prompt_msg = bot.send_message(chat_id, "📸 *Send your Payment Screenshot (Photo) now for automatic verification:*", parse_mode="Markdown")
         bot.register_next_step_handler(prompt_msg, forward_screenshot_to_admin, token, amount, prompt_msg.message_id)
     except Exception as e:
         print(f"Ask Screenshot Callback Error: {e}")
@@ -173,15 +169,13 @@ def forward_screenshot_to_admin(message, token, amount, prompt_msg_id):
         chat_id = message.chat.id
         user_name = message.from_user.first_name or "Premium User"
         
-        # User ne agar photo nahi bheji (fake text ya firse command bhej diya) toh block kar do
         if not message.photo:
-            bot.reply_to(message, "❌ *Input Error: Please send your proof strictly as a Photo/Screenshot. Click checkout button again to retry.*", parse_mode="Markdown")
+            bot.reply_to(message, "❌ *Please send a valid Photo/Screenshot only. Click the button above to try again.*", parse_mode="Markdown")
             return
 
-        # Clear quality ke liye sabse badi photo file ki ID select karein
         photo_file_id = message.photo[-1].file_id
 
-        status_msg = bot.send_message(chat_id, "⌛ *Status Alert: Your screenshot is being reviewed by our server. Please hold for up to 60 seconds...*", parse_mode="Markdown")
+        status_msg = bot.send_message(chat_id, "⌛ *Verifying payment automatically... Please wait up to 60 seconds.*", parse_mode="Markdown")
         status_msg_id = status_msg.message_id
         
         admin_markup = InlineKeyboardMarkup()
@@ -190,14 +184,13 @@ def forward_screenshot_to_admin(message, token, amount, prompt_msg_id):
         admin_markup.row(approve_btn, reject_btn)
         
         admin_alert_text = (
-            "🔔 *System Alert: New Manual Verification Request!* 🔔\n\n"
-            f"👤 *Premium Customer:* {user_name} (`{chat_id}`)\n"
-            f"💰 *Expected Amount:* `₹{amount}`\n"
-            f"📦 *Link Token Access:* `{token}`\n\n"
-            "📎 *Action Required:* View the attached screenshot and manually approve or reject below."
+            "🔔 *New Payment Verification Request!* 🔔\n\n"
+            f"👤 *Customer:* {user_name} (`{chat_id}`)\n"
+            f"💰 *Amount:* `₹{amount}`\n"
+            f"📦 *Token:* `{token}`\n\n"
+            "📎 *Action Required:* Approve or reject below."
         )
         
-        # Admin ko caption ke sath direct photo screenshot jayega
         bot.send_photo(ADMIN_ID, photo_file_id, caption=admin_alert_text, parse_mode="Markdown", reply_markup=admin_markup)
         
     except Exception as e:
@@ -250,7 +243,7 @@ def handle_admin_decision(call):
             except Exception as del_err:
                 print(f"Reject mode text deletion failed: {del_err}")
                 
-            bot.send_message(target_user_id, "❌ *Verification Failed: Admin has rejected your payment status. Please confirm you paid the correct amount, send a valid screenshot and try again.*", parse_mode="Markdown")
+            bot.send_message(target_user_id, "❌ *Automatic Verification Failed: Payment could not be confirmed. Please confirm you paid the exact amount, send a valid screenshot and try again.*", parse_mode="Markdown")
             
     except Exception as e:
         print(f"Callback Error: {e}")
