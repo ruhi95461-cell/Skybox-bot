@@ -286,6 +286,64 @@ def analyze_screenshot(image_bytes, expected_amount):
     except Exception as e:
         print(f"Cloud OCR Analysis Error: {e}")
         return "MANUAL_REVIEW", f"OCR Timeout/Error ({e}) -> Sent for manual check.", None
+        @app.route('/')
+def home():
+    return "Skybox Forwarder Bot is Running Online on Render!"
+
+def run():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# =====================================================================
+# 📦 STEP 4: TELEGRAM ADMIN COMMANDS & HANDLERS
+# =====================================================================
+@bot.message_handler(commands=['gen'])
+def generate_link(message):
+    if message.from_user.id != ADMIN_ID:
+        return
+        
+    args = message.text.split()
+    if len(args) < 2:
+        bot.reply_to(message, "⚠️ *Format Setup Engine:*\n\n*Use exact format:* `/gen <amount>`\n*Example:* `/gen 5`", parse_mode="Markdown")
+        return
+        
+    try:
+        _, raw_amt = args
+        amount = round(float(raw_amt), 2)
+    except ValueError:
+        bot.reply_to(message, "❌ *System Alert: Invalid Numeric Amount!*", parse_mode="Markdown")
+        return
+        
+    for token_key, data in saved_links.items():
+        if data.get("amount") == amount:
+            bot.reply_to(message, f"📢 *Database Conflict Alert!*\n\n*Price Level ₹{amount} is already active under token:* `{token_key}`", parse_mode="Markdown")
+            return
+        
+    unique_token = secrets.token_hex(6)
+    user_link = f"https://t.me/{BOT_USERNAME}?start={unique_token}"
+    
+    structure_text = (
+        f"👑 *Gateway Forwarder Link Generated!* 👑\n\n"
+        f"🔗 *User Action Link:* `{user_link}`\n\n"
+        f"⚙️ *GitHub Permanent Code Bracket:*\n"
+        f"```python\n"
+        f"    \"{unique_token}\": {{\n"
+        f"        \"amount\": {amount},\n"
+        f"        \"channel_id\": \"YAHAN_APNE_NEW_CHANNEL_KI_ID_DALEIN\"\n"
+        f"    }}\n"
+        f"```"
+    )
+    
+    saved_links[unique_token] = {
+        "amount": amount,
+        "channel_id": "@ChangeMe"
+    }
+    
+    bot.reply_to(message, structure_text, parse_mode="Markdown")
     
 # =====================================================================
 # 📦 STEP 5: USER CHECKOUT & FLOW PIPELINE (SHORT & AUTOMATIC)
