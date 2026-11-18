@@ -50,9 +50,12 @@ saved_links = {
 } 
 
 # =====================================================================
-# 📦 STEP 3: STRICT ANTI-AI FORENSICS + FLEXIBLE CROPPED OCR ENGINE
+# 📦 STEP 3: STRICT ORDER OCR CHECK -> FINAL AI/RESOLUTION SECURITY GATE
 # =====================================================================
 from PIL import ImageChops, ImageStat
+import io, re
+from PIL import Image
+import qrcode
 
 def generate_upi_qr(upi_id, amount):
     upi_url = f"upi://pay?pa={upi_id}&am={amount}&cu=INR"
@@ -67,21 +70,18 @@ def generate_upi_qr(upi_id, amount):
     return img_byte_arr
 
 def strict_forensic_check(image_bytes, pil_img):
+    # Metadata and AI signature checks for editor tools
     raw_lower = image_bytes[:80000].lower()
-    editor_markers = [
-        b"gemini", b"imagen", b"synthid", b"c2pa", b"trainedalgorithmicmedia",
-        b"photoshop", b"picsart", b"canva", b"snapseed", b"remini", b"lightroom", b"gimp", b"pixlr"
-    ]
+    editor_markers = [b"gemini", b"imagen", b"synthid", b"c2pa", b"photoshop", b"picsart", b"canva"]
     for marker in editor_markers:
         if marker in raw_lower:
             return True, f"AI/Editing tool signature ({marker.decode()}) detected."
 
+    # Resolution and ELA (Error Level Analysis) tampering checks
     w, h = pil_img.size
-    if h > w * 1.8:
-        standard_widths = {720, 750, 828, 900, 1080, 1125, 1170, 1179, 1200, 1220, 1242, 1260, 1284, 1290, 1320, 1440}
-        if w not in standard_widths:
-            return True, f"AI/Gemini modified resolution ({w}x{h}px) detected."
-
+    if max(w, h) not in (1280, 2560) and h > w * 1.8:
+        return True, f"AI/Gemini modified resolution ({w}x{h}px) detected."
+    
     try:
         rgb_img = pil_img.convert("RGB")
         buf = io.BytesIO()
@@ -90,55 +90,33 @@ def strict_forensic_check(image_bytes, pil_img):
         recompressed = Image.open(buf)
         diff = ImageChops.difference(rgb_img, recompressed)
         stat = ImageStat.Stat(diff)
-        max_diffs = [ext[1] for ext in stat.extrema]
-        mean_diff = sum(stat.mean) / 3.0
-        if max(max_diffs) > 58 and mean_diff > 3.2:
-            return True, f"Image tampering / AI smudge patch detected (ELA Score: {max(max_diffs)})."
+        if max([b - a for a, b in stat.extrema]) > 58 and (sum(stat.mean) / 3.0) > 3.2:
+            return True, "Image tampering / AI smudge patch detected."
     except Exception:
         pass
-
     return False, "Clean"
 
-def check_time_gap(full_text, now_ist):
+def check_time_gap(full_text, now_ist, MAX_TIME_GAP_MINUTES=120):
+    # Validates receipt timestamp (12-hour and 24-hour formats) against current IST time
     matches_12h = re.findall(r'\b(0?[1-9]|1[0-2]):([0-5][0-9])\s*(am|pm)\b', full_text)
     if matches_12h:
-        parsed_hours = []
-        for hr_str, min_str, meridiem in matches_12h:
-            hr = int(hr_str)
-            mn = int(min_str)
-            if meridiem == "pm" and hr != 12:
-                hr += 12
-            elif meridiem == "am" and hr == 12:
-                hr = 0
-            parsed_hours.append((hr, mn))
-            
-            receipt_dt = now_ist.replace(hour=hr, minute=mn, second=0, microsecond=0)
-            diff_minutes = (now_ist - receipt_dt).total_seconds() / 60.0
-            
-            if diff_minutes + 5 <= 0:
-                return False, f"Receipt time ({hr_str}:{min_str} {meridiem.upper()}) current time se aage hai.", None
-            if diff_minutes > MAX_TIME_GAP_MINUTES:
-                hrs_gap = round(diff_minutes / 60, 1)
-                return False, f"Time gap 2 ghante se zyada hai ({hrs_gap} hrs purana screenshot).", None
-
-        if len(parsed_hours) >= 2:
-            t1 = parsed_hours[0][0] * 60 + parsed_hours[0][1]
-            t2 = parsed_hours[1][0] * 60 + parsed_hours[1][1]
-            if abs(t1 - t2) > 15:
-                return False, "Top phone clock aur receipt time mein mismatch hai (Edited screenshot).", None
-
         first_hr, first_mn, first_mer = next(iter(matches_12h))
+        hr = int(first_hr)
+        if first_mer == "pm" and hr != 12: hr += 12
+        elif first_mer == "am" and hr == 12: hr = 0
+        receipt_dt = now_ist.replace(hour=hr, minute=int(first_mn), second=0, microsecond=0)
+        diff_minutes = (now_ist - receipt_dt).total_seconds() / 60.0
+        if diff_minutes > MAX_TIME_GAP_MINUTES:
+            return False, "Time gap 2 ghante se zyada hai.", None
         return True, "Time gap within 2 hours", f"{int(first_hr):02d}:{first_mn}{first_mer}"
-
+    
     matches_24h = re.findall(r'\b([01]?[0-9]|2[0-3]):([0-5][0-9])\b', full_text)
     if matches_24h:
-        for hr_str, min_str in matches_24h:
-            hr = int(hr_str)
-            mn = int(min_str)
-            receipt_dt = now_ist.replace(hour=hr, minute=mn, second=0, microsecond=0)
-            diff_minutes = (now_ist - receipt_dt).total_seconds() / 60.0
-            if diff_minutes >= -5 and MAX_TIME_GAP_MINUTES >= diff_minutes:
-                return True, "Time gap within 2 hours (24h)", f"{hr:02d}:{min_str}"
+        hr, min_str = map(int, matches_24h[0])
+        receipt_dt = now_ist.replace(hour=hr, minute=min_str, second=0, microsecond=0)
+        diff_minutes = (now_ist - receipt_dt).total_seconds() / 60.0
+        if -5 <= diff_minutes <= MAX_TIME_GAP_MINUTES:
+            return True, "Time gap within 2 hours (24h)", f"{hr:02d}:{min_str:02d}"
         return False, "Time gap 2 ghante se zyada hai ya time match nahi hua.", None
     
     return False, "Receipt ka time detect nahi hua.", None
@@ -146,12 +124,8 @@ def check_time_gap(full_text, now_ist):
 def analyze_screenshot(image_bytes, expected_amount):
     try:
         pil_img = Image.open(io.BytesIO(image_bytes))
-        
-        # 0. STRICT AI / GEMINI / PICSART FORENSIC CHECK
-        is_tampered, tamper_reason = strict_forensic_check(image_bytes, pil_img)
-        if is_tampered:
-            return "MANUAL_REVIEW", tamper_reason, None
 
+        # 1. PEHLE OCR CHALAYEIN (Taaki Galat Amount / Name / UPI / Old Date turant Auto-Reject ho!)
         ocr_endpoint = "https://api.ocr.space/parse/image"
         resp = requests.post(
             ocr_endpoint,
@@ -184,28 +158,29 @@ def analyze_screenshot(image_bytes, expected_amount):
         if not full_text:
             return "AUTO_REJECT", "Ye payment screenshot nahi hai (Koi text nahi mila).", None
 
-        # 1. Payment Keywords Check
+        # 2. Payment Keywords Check
         payment_keywords = ["transaction", "paid to", "upi", "successful", "success", "utr", "payment", "debited", "credited", "bharatpe", "phonepe", "gpay", "paytm", "mobikwik"]
         if not any(re.search(rf'\b{kw}\b', full_text) for kw in payment_keywords):
             return "AUTO_REJECT", "Ye valid UPI payment screenshot nahi hai.", None
 
-        # 2. Receiver Name ya Official UPI ID Check
-        has_receiver = (
-            EXPECTED_RECEIVER_NAME in full_text 
-            or "tanu" in full_text 
-            or "bharatpe2z0d0g3u4z52337" in full_text
-        )
-        if not has_receiver:
-            return "AUTO_REJECT", "Receiver name 'Tanu Das' ya official UPI ID nahi mila.", None
+        # 3. Receiver Name Check ('Tanu Das' compulsory)
+        if EXPECTED_RECEIVER_NAME not in full_text and "tanu" not in full_text:
+            return "AUTO_REJECT", "Receiver name 'Tanu Das' match nahi hua.", None
 
-        # 3. Exact Amount Check
+        # 4. UPI ID Check (Agar screenshot mein UPI ID dikh raha hai toh apna hi hona chahiye; hidden hai toh chalega)
+        upi_handles = re.findall(r'[a-z0-9.\-_]+@[a-z]{2,}', full_text)
+        if upi_handles:
+            if not any("bharatpe2z0d0g3u4z52337" in u for u in upi_handles):
+                return "AUTO_REJECT", f"Galat UPI ID ({next(iter(upi_handles))}) dikh raha hai.", None
+
+        # 5. Exact Amount Check (Galat amount -> Direct Auto-Reject!)
         amt_float = float(expected_amount)
         amt_int = int(amt_float)
         amt_patterns = [str(amt_int), f"{amt_float:.2f}", f"{amt_float:.1f}"]
         if not any(pat in full_text for pat in amt_patterns):
-            return "AUTO_REJECT", f"Amount ₹{amt_int} match nahi hua.", None
+            return "AUTO_REJECT", f"Amount match nahi hua (Expected: ₹{amt_int}).", None
 
-        # 4. Flexible Date Check (Cropped & All Formats Supported)
+        # 6. Date Check (Purani date -> Direct Auto-Reject)
         ist = timezone(timedelta(hours=5, minutes=30))
         now_ist = datetime.now(ist)
         d0, d1 = now_ist.strftime("%d"), str(now_ist.day)
@@ -228,22 +203,27 @@ def analyze_screenshot(image_bytes, expected_amount):
             if any_other_date:
                 return "AUTO_REJECT", f"Purani/galat date ({any_other_date.group(0)}) mili.", None
 
-        # 5. UTR Optional (Date+Time ya UTR dono se Auto-Approve + Repeat Lock)
+        # 7. AB LAST MEIN AI / GEMINI / TAMPERING FORENSIC CHECK (Suspicious ho toh Manual Review)
+        is_tampered, tamper_reason = strict_forensic_check(image_bytes, pil_img)
+        if is_tampered:
+            return "MANUAL_REVIEW", tamper_reason, None
+
+        # 8. UTR & Hidden Details Logic
         utr_matches = re.findall(r'\b\d{12}\b', full_text)
         utr_number = next(iter(utr_matches), None)
-
-        if not has_today_date and not utr_number:
-            return "MANUAL_REVIEW", "Date aur UTR dono hidden hain -> Manual check required.", None
 
         time_tag = "notime"
         if has_today_date:
             time_ok, time_msg, time_tag = check_time_gap(full_text, now_ist)
             if not time_ok:
                 return "MANUAL_REVIEW", time_msg, utr_number
+        else:
+            if not utr_number:
+                return "MANUAL_REVIEW", "Date aur UTR dono hidden hain (Amount, Name & UPI match) -> Manual check required.", None
 
         unique_lock_key = utr_number if utr_number else f"{d0}-{m_num}-{y4}_{time_tag}_{amt_int}"
 
-        # 6. Strict Pixel Alignment & Font Height Check (PicsArt / Manual Edits)
+        # 9. Pixel Alignment & Font Height Check
         overlay_lines = first_res.get("TextOverlay", {}).get("Lines", [])
         line_boxes = []
         for ln in overlay_lines:
@@ -291,53 +271,6 @@ def run():
 def keep_alive():
     t = Thread(target=run)
     t.start()
-
-# =====================================================================
-# 📦 STEP 4: TELEGRAM ADMIN COMMANDS & HANDLERS
-# =====================================================================
-@bot.message_handler(commands=['gen'])
-def generate_link(message):
-    if message.from_user.id != ADMIN_ID:
-        return
-        
-    args = message.text.split()
-    if len(args) < 2:
-        bot.reply_to(message, "⚠️ *Format Setup Engine:*\n\n*Use exact format:* `/gen <amount>`\n*Example:* `/gen 5`", parse_mode="Markdown")
-        return
-        
-    try:
-        _, raw_amt = args
-        amount = round(float(raw_amt), 2)
-    except ValueError:
-        bot.reply_to(message, "❌ *System Alert: Invalid Numeric Amount!*", parse_mode="Markdown")
-        return
-        
-    for token_key, data in saved_links.items():
-        if data.get("amount") == amount:
-            bot.reply_to(message, f"📢 *Database Conflict Alert!*\n\n*Price Level ₹{amount} is already active under token:* `{token_key}`", parse_mode="Markdown")
-            return
-        
-    unique_token = secrets.token_hex(6)
-    user_link = f"https://t.me/{BOT_USERNAME}?start={unique_token}"
-    
-    structure_text = (
-        f"👑 *Gateway Forwarder Link Generated!* 👑\n\n"
-        f"🔗 *User Action Link:* `{user_link}`\n\n"
-        f"⚙️ *GitHub Permanent Code Bracket:*\n"
-        f"```python\n"
-        f"    \"{unique_token}\": {{\n"
-        f"        \"amount\": {amount},\n"
-        f"        \"channel_id\": \"YAHAN_APNE_NEW_CHANNEL_KI_ID_DALEIN\"\n"
-        f"    }}\n"
-        f"```"
-    )
-    
-    saved_links[unique_token] = {
-        "amount": amount,
-        "channel_id": "@ChangeMe"
-    }
-    
-    bot.reply_to(message, structure_text, parse_mode="Markdown")
     
 # =====================================================================
 # 📦 STEP 5: USER CHECKOUT & FLOW PIPELINE (SHORT & AUTOMATIC)
