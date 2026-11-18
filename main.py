@@ -125,6 +125,19 @@ def analyze_screenshot(image_bytes, expected_amount):
         if not full_text:
             return "AUTO_REJECT", "Ye payment screenshot nahi hai (Koi text nahi mila).", None
 
+        # 0. Fake Payment Generator Template Blacklist (Bike insurance excluded)
+        fake_generator_phrases = [
+            "wallet txn id",
+            "updated wallet balance",
+            "add money to wallet",
+            "for you on phonepe",
+            "top-up wallet",
+            "view details check balance"
+        ]
+        for phrase in fake_generator_phrases:
+            if phrase in full_text:
+                return "AUTO_REJECT", f"Fake payment generator template detected ('{phrase}').", None
+
         # 1. Payment Keywords Check
         payment_keywords = ["transaction", "paid to", "upi", "successful", "success", "utr", "payment", "debited", "credited", "bharatpe", "phonepe", "gpay", "paytm", "mobikwik"]
         if not any(re.search(rf'\b{kw}\b', full_text) for kw in payment_keywords):
@@ -184,7 +197,7 @@ def analyze_screenshot(image_bytes, expected_amount):
 
         unique_lock_key = utr_number if utr_number else f"{d0}-{m_num}-{y4}_{time_tag}_{amt_int}"
 
-        # 6. Anti-AI Row Alignment Check
+        # 6. Anti-Fake Edit Check: Font Size (Height) & Row Alignment Mismatch -> AUTO_REJECT
         overlay_lines = first_res.get("TextOverlay", {}).get("Lines", [])
         line_boxes = []
         for ln in overlay_lines:
@@ -192,22 +205,45 @@ def analyze_screenshot(image_bytes, expected_amount):
             if not words:
                 continue
             txt = ln.get("LineText", "").strip()
+            lower_txt = txt.lower()
             tops = [float(w.get("Top", 0)) for w in words]
             heights = [float(w.get("Height", 10)) for w in words]
             avg_top = sum(tops) / len(tops)
             avg_h = sum(heights) / len(heights)
-            if max(tops) - min(tops) > 4.5:
-                if any(pat in txt.lower() for pat in amt_patterns) or (utr_number and utr_number in txt.lower()):
-                    return "MANUAL_REVIEW", f"Misaligned digits detected in '{txt}'.", unique_lock_key
-            line_boxes.append({"text": txt, "lower": txt.lower(), "top": avg_top, "height": avg_h})
+
+            is_critical_line = (
+                any(pat in lower_txt for pat in amt_patterns)
+                or (utr_number and utr_number in lower_txt)
+                or bool(re.search(r'\b(am|pm)\b', lower_txt))
+                or any(dt in lower_txt for dt in valid_dates)
+            )
+
+            # Rupee symbol '₹' ko exclude karke baaki words ki height compare karein
+            clean_heights = [
+                float(w.get("Height", 10))
+                for w in words
+                if w.get("WordText", "").strip() not in ("₹", "rs", "rs.")
+            ]
+
+            if is_critical_line and len(clean_heights) >= 2:
+                # Check 1: Ek hi line mein font size (Height) bada-chhota hona (safe threshold 1.50)
+                min_h, max_h = min(clean_heights), max(clean_heights)
+                if min_h > 0 and (max_h / min_h) > 1.50:
+                    return "AUTO_REJECT", f"Fake edit detected: Font size mismatch in '{txt}'.", unique_lock_key
+
+                # Check 2: Ek hi line ke words upar-neeche (misaligned) hona
+                if (max(tops) - min(tops)) > 4.0:
+                    return "AUTO_REJECT", f"Fake edit detected: Misaligned text in '{txt}'.", unique_lock_key
+
+            line_boxes.append({"text": txt, "lower": lower_txt, "top": avg_top, "height": avg_h})
 
         for lb in line_boxes:
             is_amount_box = any(pat in lb["lower"] for pat in amt_patterns) and ("₹" in lb["text"] or lb["lower"].isdigit() or "." in lb["lower"])
             if is_amount_box:
                 peers = [o for o in line_boxes if o != lb and (lb["height"] * 0.8) > abs(o["top"] - lb["top"])]
                 for p in peers:
-                    if abs(p["top"] - lb["top"]) > 5.0:
-                        return "MANUAL_REVIEW", f"Amount '{lb['text']}' row alignment mismatch.", unique_lock_key
+                    if abs(p["top"] - lb["top"]) > 4.5:
+                        return "AUTO_REJECT", f"Fake edit detected: Amount '{lb['text']}' alignment mismatch.", unique_lock_key
 
         return "AUTO_APPROVE", "Verified: Tanu Das/UPI, Amount, Date/Time & Unique Lock OK.", unique_lock_key
 
