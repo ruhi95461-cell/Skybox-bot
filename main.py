@@ -286,7 +286,8 @@ def analyze_screenshot(image_bytes, expected_amount):
     except Exception as e:
         print(f"Cloud OCR Analysis Error: {e}")
         return "MANUAL_REVIEW", f"OCR Timeout/Error ({e}) -> Sent for manual check.", None
-        @app.route('/')
+        
+@app.route('/')
 def home():
     return "Skybox Forwarder Bot is Running Online on Render!"
 
