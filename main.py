@@ -50,8 +50,10 @@ saved_links = {
 } 
 
 # =====================================================================
-# 📦 STEP 3: FAST CLOUD OCR, ANTI-REPEAT TIME LOCK & VERIFICATION ENGINE
+# 📦 STEP 3: STRICT ANTI-AI FORENSICS + FLEXIBLE CROPPED OCR ENGINE
 # =====================================================================
+from PIL import ImageChops, ImageStat
+
 def generate_upi_qr(upi_id, amount):
     upi_url = f"upi://pay?pa={upi_id}&am={amount}&cu=INR"
     qr = qrcode.QRCode(version=1, box_size=10, border=4)
@@ -64,9 +66,43 @@ def generate_upi_qr(upi_id, amount):
     img_byte_arr.seek(0)
     return img_byte_arr
 
+def strict_forensic_check(image_bytes, pil_img):
+    raw_lower = image_bytes[:80000].lower()
+    editor_markers = [
+        b"gemini", b"imagen", b"synthid", b"c2pa", b"trainedalgorithmicmedia",
+        b"photoshop", b"picsart", b"canva", b"snapseed", b"remini", b"lightroom", b"gimp", b"pixlr"
+    ]
+    for marker in editor_markers:
+        if marker in raw_lower:
+            return True, f"AI/Editing tool signature ({marker.decode()}) detected."
+
+    w, h = pil_img.size
+    if h > w * 1.8:
+        standard_widths = {720, 750, 828, 900, 1080, 1125, 1170, 1179, 1200, 1220, 1242, 1260, 1284, 1290, 1320, 1440}
+        if w not in standard_widths:
+            return True, f"AI/Gemini modified resolution ({w}x{h}px) detected."
+
+    try:
+        rgb_img = pil_img.convert("RGB")
+        buf = io.BytesIO()
+        rgb_img.save(buf, format="JPEG", quality=90)
+        buf.seek(0)
+        recompressed = Image.open(buf)
+        diff = ImageChops.difference(rgb_img, recompressed)
+        stat = ImageStat.Stat(diff)
+        max_diffs = [ext[1] for ext in stat.extrema]
+        mean_diff = sum(stat.mean) / 3.0
+        if max(max_diffs) > 58 and mean_diff > 3.2:
+            return True, f"Image tampering / AI smudge patch detected (ELA Score: {max(max_diffs)})."
+    except Exception:
+        pass
+
+    return False, "Clean"
+
 def check_time_gap(full_text, now_ist):
     matches_12h = re.findall(r'\b(0?[1-9]|1[0-2]):([0-5][0-9])\s*(am|pm)\b', full_text)
     if matches_12h:
+        parsed_hours = []
         for hr_str, min_str, meridiem in matches_12h:
             hr = int(hr_str)
             mn = int(min_str)
@@ -74,6 +110,7 @@ def check_time_gap(full_text, now_ist):
                 hr += 12
             elif meridiem == "am" and hr == 12:
                 hr = 0
+            parsed_hours.append((hr, mn))
             
             receipt_dt = now_ist.replace(hour=hr, minute=mn, second=0, microsecond=0)
             diff_minutes = (now_ist - receipt_dt).total_seconds() / 60.0
@@ -83,15 +120,39 @@ def check_time_gap(full_text, now_ist):
             if diff_minutes > MAX_TIME_GAP_MINUTES:
                 hrs_gap = round(diff_minutes / 60, 1)
                 return False, f"Time gap 2 ghante se zyada hai ({hrs_gap} hrs purana screenshot).", None
+
+        if len(parsed_hours) >= 2:
+            t1 = parsed_hours[0][0] * 60 + parsed_hours[0][1]
+            t2 = parsed_hours[1][0] * 60 + parsed_hours[1][1]
+            if abs(t1 - t2) > 15:
+                return False, "Top phone clock aur receipt time mein mismatch hai (Edited screenshot).", None
+
         first_hr, first_mn, first_mer = next(iter(matches_12h))
-        time_tag = f"{int(first_hr):02d}:{first_mn}{first_mer}"
-        return True, "Time gap within 2 hours", time_tag
+        return True, "Time gap within 2 hours", f"{int(first_hr):02d}:{first_mn}{first_mer}"
+
+    matches_24h = re.findall(r'\b([01]?[0-9]|2[0-3]):([0-5][0-9])\b', full_text)
+    if matches_24h:
+        for hr_str, min_str in matches_24h:
+            hr = int(hr_str)
+            mn = int(min_str)
+            receipt_dt = now_ist.replace(hour=hr, minute=mn, second=0, microsecond=0)
+            diff_minutes = (now_ist - receipt_dt).total_seconds() / 60.0
+            if diff_minutes >= -5 and MAX_TIME_GAP_MINUTES >= diff_minutes:
+                return True, "Time gap within 2 hours (24h)", f"{hr:02d}:{min_str}"
+        return False, "Time gap 2 ghante se zyada hai ya time match nahi hua.", None
     
-    return False, "Receipt ka exact AM/PM time detect nahi hua.", None
+    return False, "Receipt ka time detect nahi hua.", None
 
 def analyze_screenshot(image_bytes, expected_amount):
     try:
-        ocr_endpoint = "https://" + "api.ocr.space" + "/parse/image"
+        pil_img = Image.open(io.BytesIO(image_bytes))
+        
+        # 0. STRICT AI / GEMINI / PICSART FORENSIC CHECK
+        is_tampered, tamper_reason = strict_forensic_check(image_bytes, pil_img)
+        if is_tampered:
+            return "MANUAL_REVIEW", tamper_reason, None
+
+        ocr_endpoint = "https://api.ocr.space/parse/image"
         resp = requests.post(
             ocr_endpoint,
             headers={"apikey": OCR_API_KEY},
@@ -107,10 +168,8 @@ def analyze_screenshot(image_bytes, expected_amount):
             return "MANUAL_REVIEW", f"OCR Server busy (HTTP {resp.status_code}) -> Sent for manual check.", None
 
         ocr_json = resp.json()
-        
         if ocr_json.get("IsErroredOnProcessing"):
             err_msg = str(ocr_json.get("ErrorMessage", "API Key/OCR Error"))
-            print(f"OCR API Error: {err_msg}")
             return "MANUAL_REVIEW", f"OCR API Alert ({err_msg}) -> Sent for manual check.", None
 
         parsed_results = ocr_json.get("ParsedResults") or []
@@ -146,7 +205,7 @@ def analyze_screenshot(image_bytes, expected_amount):
         if not any(pat in full_text for pat in amt_patterns):
             return "AUTO_REJECT", f"Amount ₹{amt_int} match nahi hua.", None
 
-        # 4. Flexible Date Check (MobiKwik '26 format bhi included!)
+        # 4. Flexible Date Check (Cropped & All Formats Supported)
         ist = timezone(timedelta(hours=5, minutes=30))
         now_ist = datetime.now(ist)
         d0, d1 = now_ist.strftime("%d"), str(now_ist.day)
@@ -169,7 +228,7 @@ def analyze_screenshot(image_bytes, expected_amount):
             if any_other_date:
                 return "AUTO_REJECT", f"Purani/galat date ({any_other_date.group(0)}) mili.", None
 
-        # 5. UTR ya Time-Amount Fingerprint Lock (Repeat Screenshot Rokne Ke Liye)
+        # 5. UTR Optional (Date+Time ya UTR dono se Auto-Approve + Repeat Lock)
         utr_matches = re.findall(r'\b\d{12}\b', full_text)
         utr_number = next(iter(utr_matches), None)
 
@@ -184,7 +243,7 @@ def analyze_screenshot(image_bytes, expected_amount):
 
         unique_lock_key = utr_number if utr_number else f"{d0}-{m_num}-{y4}_{time_tag}_{amt_int}"
 
-        # 6. Anti-AI Row Alignment Check
+        # 6. Strict Pixel Alignment & Font Height Check (PicsArt / Manual Edits)
         overlay_lines = first_res.get("TextOverlay", {}).get("Lines", [])
         line_boxes = []
         for ln in overlay_lines:
@@ -196,9 +255,15 @@ def analyze_screenshot(image_bytes, expected_amount):
             heights = [float(w.get("Height", 10)) for w in words]
             avg_top = sum(tops) / len(tops)
             avg_h = sum(heights) / len(heights)
-            if max(tops) - min(tops) > 4.5:
-                if any(pat in txt.lower() for pat in amt_patterns) or (utr_number and utr_number in txt.lower()):
-                    return "MANUAL_REVIEW", f"Misaligned digits detected in '{txt}'.", unique_lock_key
+            
+            if max(tops) - min(tops) > 3.5:
+                if any(pat in txt.lower() for pat in amt_patterns) or (utr_number and utr_number in txt.lower()) or any(m in txt.lower() for m in [m_abbr, m_full]):
+                    return "MANUAL_REVIEW", f"Manual/PicsArt alignment shift detected in '{txt}'.", unique_lock_key
+            
+            if len(heights) >= 2 and (max(heights) - min(heights) > 5.0):
+                if any(pat in txt.lower() for pat in amt_patterns):
+                    return "MANUAL_REVIEW", f"Edited font size mismatch in '{txt}'.", unique_lock_key
+
             line_boxes.append({"text": txt, "lower": txt.lower(), "top": avg_top, "height": avg_h})
 
         for lb in line_boxes:
@@ -206,10 +271,10 @@ def analyze_screenshot(image_bytes, expected_amount):
             if is_amount_box:
                 peers = [o for o in line_boxes if o != lb and (lb["height"] * 0.8) > abs(o["top"] - lb["top"])]
                 for p in peers:
-                    if abs(p["top"] - lb["top"]) > 5.0:
+                    if abs(p["top"] - lb["top"]) > 4.0:
                         return "MANUAL_REVIEW", f"Amount '{lb['text']}' row alignment mismatch.", unique_lock_key
 
-        return "AUTO_APPROVE", "Verified: Tanu Das/UPI, Amount, Date/Time & Unique Lock OK.", unique_lock_key
+        return "AUTO_APPROVE", "Verified: Genuine Unedited Screenshot, Tanu Das/UPI, Amount & Time OK.", unique_lock_key
 
     except Exception as e:
         print(f"Cloud OCR Analysis Error: {e}")
