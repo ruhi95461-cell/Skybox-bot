@@ -50,12 +50,9 @@ saved_links = {
 } 
 
 # =====================================================================
-# 📦 STEP 3: STRICT ORDER OCR CHECK -> FINAL AI/RESOLUTION SECURITY GATE
+# 📦 STEP 3: STRICT HAND-EDIT DETECTOR + FLEXIBLE OCR ENGINE
 # =====================================================================
 from PIL import ImageChops, ImageStat
-import io, re
-from PIL import Image
-import qrcode
 
 def generate_upi_qr(upi_id, amount):
     upi_url = f"upi://pay?pa={upi_id}&am={amount}&cu=INR"
@@ -70,14 +67,12 @@ def generate_upi_qr(upi_id, amount):
     return img_byte_arr
 
 def strict_forensic_check(image_bytes, pil_img):
-    # Metadata and AI signature checks for editor tools
     raw_lower = image_bytes[:80000].lower()
-    editor_markers = [b"gemini", b"imagen", b"synthid", b"c2pa", b"photoshop", b"picsart", b"canva"]
+    editor_markers = [b"gemini", b"imagen", b"synthid", b"c2pa", b"photoshop", b"picsart", b"canva", b"snapseed", b"remini"]
     for marker in editor_markers:
         if marker in raw_lower:
             return True, f"AI/Editing tool signature ({marker.decode()}) detected."
 
-    # Resolution and ELA (Error Level Analysis) tampering checks
     w, h = pil_img.size
     if max(w, h) not in (1280, 2560) and h > w * 1.8:
         return True, f"AI/Gemini modified resolution ({w}x{h}px) detected."
@@ -96,36 +91,41 @@ def strict_forensic_check(image_bytes, pil_img):
         pass
     return False, "Clean"
 
-def check_time_gap(full_text, now_ist, MAX_TIME_GAP_MINUTES=120):
-    # Validates receipt timestamp (12-hour and 24-hour formats) against current IST time
+def check_time_gap(full_text, now_ist):
     matches_12h = re.findall(r'\b(0?[1-9]|1[0-2]):([0-5][0-9])\s*(am|pm)\b', full_text)
     if matches_12h:
         first_hr, first_mn, first_mer = next(iter(matches_12h))
         hr = int(first_hr)
-        if first_mer == "pm" and hr != 12: hr += 12
-        elif first_mer == "am" and hr == 12: hr = 0
+        if first_mer == "pm" and hr != 12:
+            hr += 12
+        elif first_mer == "am" and hr == 12:
+            hr = 0
         receipt_dt = now_ist.replace(hour=hr, minute=int(first_mn), second=0, microsecond=0)
         diff_minutes = (now_ist - receipt_dt).total_seconds() / 60.0
+        if diff_minutes + 5 <= 0:
+            return False, "Receipt time current time se aage hai.", None
         if diff_minutes > MAX_TIME_GAP_MINUTES:
             return False, "Time gap 2 ghante se zyada hai.", None
         return True, "Time gap within 2 hours", f"{int(first_hr):02d}:{first_mn}{first_mer}"
     
     matches_24h = re.findall(r'\b([01]?[0-9]|2[0-3]):([0-5][0-9])\b', full_text)
     if matches_24h:
-        hr, min_str = map(int, matches_24h[0])
-        receipt_dt = now_ist.replace(hour=hr, minute=min_str, second=0, microsecond=0)
+        hr_str, min_str = next(iter(matches_24h))
+        hr, mn = int(hr_str), int(min_str)
+        receipt_dt = now_ist.replace(hour=hr, minute=mn, second=0, microsecond=0)
         diff_minutes = (now_ist - receipt_dt).total_seconds() / 60.0
-        if -5 <= diff_minutes <= MAX_TIME_GAP_MINUTES:
-            return True, "Time gap within 2 hours (24h)", f"{hr:02d}:{min_str:02d}"
+        if diff_minutes >= -5 and MAX_TIME_GAP_MINUTES >= diff_minutes:
+            return True, "Time gap within 2 hours (24h)", f"{hr:02d}:{mn:02d}"
         return False, "Time gap 2 ghante se zyada hai ya time match nahi hua.", None
     
     return False, "Receipt ka time detect nahi hua.", None
 
 def analyze_screenshot(image_bytes, expected_amount):
     try:
-        pil_img = Image.open(io.BytesIO(image_bytes))
+        pil_img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        img_w, img_h = pil_img.size
 
-        # 1. PEHLE OCR CHALAYEIN (Taaki Galat Amount / Name / UPI / Old Date turant Auto-Reject ho!)
+        # 1. PEHLE OCR CHALAYEIN
         ocr_endpoint = "https://api.ocr.space/parse/image"
         resp = requests.post(
             ocr_endpoint,
@@ -163,24 +163,24 @@ def analyze_screenshot(image_bytes, expected_amount):
         if not any(re.search(rf'\b{kw}\b', full_text) for kw in payment_keywords):
             return "AUTO_REJECT", "Ye valid UPI payment screenshot nahi hai.", None
 
-        # 3. Receiver Name Check ('Tanu Das' compulsory)
+        # 3. Receiver Name Check
         if EXPECTED_RECEIVER_NAME not in full_text and "tanu" not in full_text:
             return "AUTO_REJECT", "Receiver name 'Tanu Das' match nahi hua.", None
 
-        # 4. UPI ID Check (Agar screenshot mein UPI ID dikh raha hai toh apna hi hona chahiye; hidden hai toh chalega)
+        # 4. UPI ID Check
         upi_handles = re.findall(r'[a-z0-9.\-_]+@[a-z]{2,}', full_text)
         if upi_handles:
             if not any("bharatpe2z0d0g3u4z52337" in u for u in upi_handles):
                 return "AUTO_REJECT", f"Galat UPI ID ({next(iter(upi_handles))}) dikh raha hai.", None
 
-        # 5. Exact Amount Check (Galat amount -> Direct Auto-Reject!)
+        # 5. Exact Amount Check
         amt_float = float(expected_amount)
         amt_int = int(amt_float)
         amt_patterns = [str(amt_int), f"{amt_float:.2f}", f"{amt_float:.1f}"]
         if not any(pat in full_text for pat in amt_patterns):
             return "AUTO_REJECT", f"Amount match nahi hua (Expected: ₹{amt_int}).", None
 
-        # 6. Date Check (Purani date -> Direct Auto-Reject)
+        # 6. Date Check
         ist = timezone(timedelta(hours=5, minutes=30))
         now_ist = datetime.now(ist)
         d0, d1 = now_ist.strftime("%d"), str(now_ist.day)
@@ -203,12 +203,68 @@ def analyze_screenshot(image_bytes, expected_amount):
             if any_other_date:
                 return "AUTO_REJECT", f"Purani/galat date ({any_other_date.group(0)}) mili.", None
 
-        # 7. AB LAST MEIN AI / GEMINI / TAMPERING FORENSIC CHECK (Suspicious ho toh Manual Review)
+        # 7. ULTRA-STRICT HAND-EDIT & PATCH DETECTOR (Har Line Ki Font Height, Alignment & Color Patch Check)
+        overlay_lines = first_res.get("TextOverlay", {}).get("Lines", [])
+        line_boxes = []
+        for ln in overlay_lines:
+            words = ln.get("Words", [])
+            if not words:
+                continue
+            txt = ln.get("LineText", "").strip()
+            txt_low = txt.lower()
+            tops = [float(w.get("Top", 0)) for w in words]
+            heights = [float(w.get("Height", 10)) for w in words]
+            lefts = [float(w.get("Left", 0)) for w in words]
+            widths = [float(w.get("Width", 10)) for w in words]
+            avg_top = sum(tops) / len(tops)
+            avg_h = sum(heights) / len(heights)
+
+            # A. Har Important Line (Date, Time, Amount, UTR) par Font Height Jump Check!
+            is_critical_line = (
+                any(pat in txt_low for pat in amt_patterns)
+                or any(m in txt_low for m in [m_abbr, m_full])
+                or (":" in txt_low)
+                or ("successful" in txt_low)
+            )
+            if is_critical_line and len(heights) >= 2:
+                # Agar ek hi line mein koi word doosre se 3.2px bhi bada/chhota hai (e.g. '18 November' chhota aur '09:04 PM' bada!)
+                if (max(heights) - min(heights)) > 3.2:
+                    return "MANUAL_REVIEW", f"Hand-edit font size mismatch detected in '{txt}'.", None
+                # Agar ek hi line mein words upar-neeche (> 3.0px) paste kiye gaye hain
+                if (max(tops) - min(tops)) > 3.0:
+                    return "MANUAL_REVIEW", f"Hand-edit alignment shift detected in '{txt}'.", None
+
+            # B. Green Header White-Patch Detector (Date/Time line ke peeche safed dabba pakadne ke liye!)
+            if (any(m in txt_low for m in [m_abbr, m_full]) or "successful" in txt_low) and avg_top < (img_h * 0.45):
+                x1 = max(0, int(min(lefts)) - 4)
+                y1 = max(0, int(min(tops)) - 4)
+                x2 = min(img_w, int(max(l + w for l, w in zip(lefts, widths))) + 4)
+                y2 = min(img_h, int(max(t + h for t, h in zip(tops, heights))) + 4)
+                if x2 > x1 and y2 > y1:
+                    crop = pil_img.crop((x1, y1, x2, y2))
+                    pixels = list(crop.getdata())
+                    green_px = sum(1 for r, g, b in pixels if g > r + 25 and g > b + 25)
+                    white_px = sum(1 for r, g, b in pixels if r > 235 and g > 235 and b > 235)
+                    # Agar green header ke andar safed patch dabba bana hai (jaise 09:04 PM ke peeche white box!)
+                    if green_px > 20 and white_px > 40:
+                        return "MANUAL_REVIEW", f"White sticker/patch edit detected over green header in '{txt}'.", None
+
+            line_boxes.append({"text": txt, "lower": txt_low, "top": avg_top, "height": avg_h})
+
+        # 8. Amount Row Alignment Check (₹ aur 30 ke beech height/top mismatch)
+        for lb in line_boxes:
+            if any(pat in lb["lower"] for pat in amt_patterns):
+                peers = [o for o in line_boxes if o != lb and (lb["height"] * 0.9) > abs(o["top"] - lb["top"])]
+                for p in peers:
+                    if abs(p["top"] - lb["top"]) > 3.5 or abs(p["height"] - lb["height"]) > 5.0:
+                        return "MANUAL_REVIEW", f"Edited amount box mismatch ('{lb['text']}' vs '{p['text']}').", None
+
+        # 9. General Forensic & Resolution Check
         is_tampered, tamper_reason = strict_forensic_check(image_bytes, pil_img)
         if is_tampered:
             return "MANUAL_REVIEW", tamper_reason, None
 
-        # 8. UTR & Hidden Details Logic
+        # 10. UTR Optional Logic (Date+Time ya UTR dono se Auto-Approve + Repeat Lock)
         utr_matches = re.findall(r'\b\d{12}\b', full_text)
         utr_number = next(iter(utr_matches), None)
 
@@ -218,59 +274,18 @@ def analyze_screenshot(image_bytes, expected_amount):
             if not time_ok:
                 return "MANUAL_REVIEW", time_msg, utr_number
         else:
+            # Agar Date hidden hai aur UTR bhi hidden hai -> Manual Review
             if not utr_number:
-                return "MANUAL_REVIEW", "Date aur UTR dono hidden hain (Amount, Name & UPI match) -> Manual check required.", None
+                return "MANUAL_REVIEW", "Date aur UTR dono hidden hain -> Manual check required.", None
 
+        # Unique Lock (UTR hai toh UTR lock, warna Date+Time+Amount lock)
         unique_lock_key = utr_number if utr_number else f"{d0}-{m_num}-{y4}_{time_tag}_{amt_int}"
 
-        # 9. Pixel Alignment & Font Height Check
-        overlay_lines = first_res.get("TextOverlay", {}).get("Lines", [])
-        line_boxes = []
-        for ln in overlay_lines:
-            words = ln.get("Words", [])
-            if not words:
-                continue
-            txt = ln.get("LineText", "").strip()
-            tops = [float(w.get("Top", 0)) for w in words]
-            heights = [float(w.get("Height", 10)) for w in words]
-            avg_top = sum(tops) / len(tops)
-            avg_h = sum(heights) / len(heights)
-            
-            if max(tops) - min(tops) > 3.5:
-                if any(pat in txt.lower() for pat in amt_patterns) or (utr_number and utr_number in txt.lower()) or any(m in txt.lower() for m in [m_abbr, m_full]):
-                    return "MANUAL_REVIEW", f"Manual/PicsArt alignment shift detected in '{txt}'.", unique_lock_key
-            
-            if len(heights) >= 2 and (max(heights) - min(heights) > 5.0):
-                if any(pat in txt.lower() for pat in amt_patterns):
-                    return "MANUAL_REVIEW", f"Edited font size mismatch in '{txt}'.", unique_lock_key
-
-            line_boxes.append({"text": txt, "lower": txt.lower(), "top": avg_top, "height": avg_h})
-
-        for lb in line_boxes:
-            is_amount_box = any(pat in lb["lower"] for pat in amt_patterns) and ("₹" in lb["text"] or lb["lower"].isdigit() or "." in lb["lower"])
-            if is_amount_box:
-                peers = [o for o in line_boxes if o != lb and (lb["height"] * 0.8) > abs(o["top"] - lb["top"])]
-                for p in peers:
-                    if abs(p["top"] - lb["top"]) > 4.0:
-                        return "MANUAL_REVIEW", f"Amount '{lb['text']}' row alignment mismatch.", unique_lock_key
-
-        return "AUTO_APPROVE", "Verified: Genuine Unedited Screenshot, Tanu Das/UPI, Amount & Time OK.", unique_lock_key
+        return "AUTO_APPROVE", "Verified: Unedited Screenshot, Tanu Das/UPI, Amount & Date/Time/UTR OK.", unique_lock_key
 
     except Exception as e:
         print(f"Cloud OCR Analysis Error: {e}")
         return "MANUAL_REVIEW", f"OCR Timeout/Error ({e}) -> Sent for manual check.", None
-
-@app.route('/')
-def home():
-    return "Skybox Forwarder Bot is Running Online on Render!"
-
-def run():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
-
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
     
 # =====================================================================
 # 📦 STEP 5: USER CHECKOUT & FLOW PIPELINE (SHORT & AUTOMATIC)
