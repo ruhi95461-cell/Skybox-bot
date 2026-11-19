@@ -24,7 +24,7 @@ BOT_USERNAME = "SkyBoxx_bot"
 OCR_API_KEY = "K8822071071352488957"
 
 EXPECTED_RECEIVER_NAME = "tanu das"
-MAX_TIME_GAP_MINUTES = 120
+MAX_TIME_GAP_MINUTES = 360
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = Flask('')
