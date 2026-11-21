@@ -44,6 +44,7 @@ saved_links = {
     "acd98d30bad7": {"amount": 43.00, "channel_id": "-1004468691722"},
     "dbcda6225404": {"amount": 48.80, "channel_id": "-1003999830076"},
     "d8e2372dbca5": {"amount": 28.60, "channel_id": "-1004390368084"},
+    "430965b7864f": {"amount": 42.00, "channel_id": "-1004491113314"},
     "0900e0911952": {"amount": 37.00, "channel_id": "-1003933411317"},
     "b693df24e672": {"amount": 56.00, "channel_id": "-1003925942434"},
     "912f2bca8b49": {"amount": 44.00, "channel_id": "-1004371490401"},
