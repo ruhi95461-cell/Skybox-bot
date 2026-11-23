@@ -157,7 +157,6 @@ def analyze_screenshot(image_bytes, expected_amount):
             or "tanu" in full_text
             or "bharatpe2z0d0g3u4z52337" in full_text
         )
-
         if not has_receiver:
             return "AUTO_REJECT", "Receiver name 'Tanu Das' ya official UPI ID nahi mila.", None
 
