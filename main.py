@@ -100,7 +100,7 @@ def check_time_gap(full_text, now_ist):
 
 def analyze_screenshot(image_bytes, expected_amount):
     try:
-        ocr_endpoint = "https://ocr.space"
+        ocr_endpoint = "https://api.ocr.space/parse/image"
         resp = requests.post(
             ocr_endpoint,
             headers={"apikey": OCR_API_KEY},
