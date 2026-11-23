@@ -64,13 +64,13 @@ saved_links = {
 # =====================================================================
 # 📦 STEP 3: FAST CLOUD OCR, ANTI-REPEAT TIME LOCK & VERIFICATION ENGINE
 # =====================================================================
+
 def generate_upi_qr(upi_id, amount):
     upi_url = f"upi://pay?pa={upi_id}&am={amount}&cu=INR"
     qr = qrcode.QRCode(version=1, box_size=10, border=4)
     qr.add_data(upi_url)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
-    
     img_byte_arr = io.BytesIO()
     img.save(img_byte_arr, format='PNG')
     img_byte_arr.seek(0)
@@ -86,10 +86,8 @@ def check_time_gap(full_text, now_ist):
                 hr += 12
             elif meridiem == "am" and hr == 12:
                 hr = 0
-            
             receipt_dt = now_ist.replace(hour=hr, minute=mn, second=0, microsecond=0)
             diff_minutes = (now_ist - receipt_dt).total_seconds() / 60.0
-            
             if diff_minutes + 5 <= 0:
                 return False, f"Receipt time ({hr_str}:{min_str} {meridiem.upper()}) current time se aage hai.", None
             if diff_minutes > MAX_TIME_GAP_MINUTES:
@@ -98,28 +96,26 @@ def check_time_gap(full_text, now_ist):
         first_hr, first_mn, first_mer = next(iter(matches_12h))
         time_tag = f"{int(first_hr):02d}:{first_mn}{first_mer}"
         return True, "Time gap within 2 hours", time_tag
-    
     return False, "Receipt ka exact AM/PM time detect nahi hua.", None
 
 def analyze_screenshot(image_bytes, expected_amount):
     try:
-        ocr_endpoint = "https://api.ocr.space/parse/image"
+        ocr_endpoint = "https://ocr.space"
         resp = requests.post(
             ocr_endpoint,
             headers={"apikey": OCR_API_KEY},
             files={"file": ("receipt.jpg", image_bytes, "image/jpeg")},
             data={
                 "language": "eng",
-                "isOverlayRequired": "true",
-                "OCREngine": "1"
+                "isOverlayRequired": "false",
+                "OCREngine": "2"
             },
-            timeout=12
+            timeout=15
         )
         if resp.status_code != 200 or not resp.text.strip():
             return "MANUAL_REVIEW", f"OCR Server busy (HTTP {resp.status_code}) -> Sent for manual check.", None
 
         ocr_json = resp.json()
-        
         if ocr_json.get("IsErroredOnProcessing"):
             err_msg = str(ocr_json.get("ErrorMessage", "API Key/OCR Error"))
             print(f"OCR API Error: {err_msg}")
@@ -137,7 +133,7 @@ def analyze_screenshot(image_bytes, expected_amount):
         if not full_text:
             return "AUTO_REJECT", "Ye payment screenshot nahi hai (Koi text nahi mila).", None
 
-        # 0. Fake Payment Generator Template Blacklist (Bike insurance excluded)
+        # 0. Fake Payment Generator Template Blacklist
         fake_generator_phrases = [
             "wallet txn id",
             "updated wallet balance",
@@ -157,27 +153,29 @@ def analyze_screenshot(image_bytes, expected_amount):
 
         # 2. Receiver Name ya Official UPI ID Check
         has_receiver = (
-            EXPECTED_RECEIVER_NAME in full_text 
-            or "tanu" in full_text 
+            EXPECTED_RECEIVER_NAME in full_text
+            or "tanu" in full_text
             or "bharatpe2z0d0g3u4z52337" in full_text
         )
+
         if not has_receiver:
             return "AUTO_REJECT", "Receiver name 'Tanu Das' ya official UPI ID nahi mila.", None
 
-        # 3. Exact Amount Check
+        # 3. Exact Amount Check (39.9, 39.90, 399, 3990 sab supported)
         amt_float = float(expected_amount)
         amt_int = int(amt_float)
-        amt_patterns = [str(amt_int), f"{amt_float:.2f}", f"{amt_float:.1f}"]
+        no_dot_2 = f"{amt_float:.2f}".replace(".", "")
+        no_dot_1 = f"{amt_float:.1f}".replace(".", "")
+        amt_patterns = [str(amt_int), f"{amt_float:.2f}", f"{amt_float:.1f}", no_dot_2, no_dot_1]
         if not any(pat in full_text for pat in amt_patterns):
-            return "AUTO_REJECT", f"Amount ₹{amt_int} match nahi hua.", None
+            return "AUTO_REJECT", f"Amount ₹{expected_amount} match nahi hua.", None
 
-        # 4. Flexible Date Check (MobiKwik '26 format bhi included!)
+        # 4. Flexible Date Check
         ist = timezone(timedelta(hours=5, minutes=30))
         now_ist = datetime.now(ist)
         d0, d1 = now_ist.strftime("%d"), str(now_ist.day)
         m_abbr, m_full, m_num = now_ist.strftime("%b").lower(), now_ist.strftime("%B").lower(), now_ist.strftime("%m")
         y4, y2 = now_ist.strftime("%Y"), now_ist.strftime("%y")
-
         valid_dates = [
             f"{d0} {m_abbr} {y4}", f"{d1} {m_abbr} {y4}",
             f"{d0} {m_abbr} '{y2}", f"{d1} {m_abbr} '{y2}",
@@ -187,17 +185,15 @@ def analyze_screenshot(image_bytes, expected_amount):
             f"{d0}/{m_num}/{y4}", f"{d0}-{m_num}-{y4}",
             f"{d0}/{m_num}/{y2}", f"{d0}-{m_num}-{y2}"
         ]
-        
         has_today_date = any(dt in full_text for dt in valid_dates)
         if not has_today_date:
             any_other_date = re.search(r'\b(\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+[\']?\d{2,4}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b', full_text)
             if any_other_date:
                 return "AUTO_REJECT", f"Purani/galat date ({any_other_date.group(0)}) mili.", None
 
-        # 5. UTR ya Time-Amount Fingerprint Lock (Repeat Screenshot Rokne Ke Liye)
+        # 5. UTR ya Time-Amount Fingerprint Lock
         utr_matches = re.findall(r'\b\d{12}\b', full_text)
         utr_number = next(iter(utr_matches), None)
-
         if not has_today_date and not utr_number:
             return "MANUAL_REVIEW", "Date aur UTR dono hidden hain -> Manual check required.", None
 
@@ -208,55 +204,6 @@ def analyze_screenshot(image_bytes, expected_amount):
                 return "MANUAL_REVIEW", time_msg, utr_number
 
         unique_lock_key = utr_number if utr_number else f"{d0}-{m_num}-{y4}_{time_tag}_{amt_int}"
-
-        # 6. Anti-Fake Edit Check: Font Size (Height) & Row Alignment Mismatch -> AUTO_REJECT
-        overlay_lines = first_res.get("TextOverlay", {}).get("Lines", [])
-        line_boxes = []
-        for ln in overlay_lines:
-            words = ln.get("Words", [])
-            if not words:
-                continue
-            txt = ln.get("LineText", "").strip()
-            lower_txt = txt.lower()
-            tops = [float(w.get("Top", 0)) for w in words]
-            heights = [float(w.get("Height", 10)) for w in words]
-            avg_top = sum(tops) / len(tops)
-            avg_h = sum(heights) / len(heights)
-
-            is_critical_line = (
-                any(pat in lower_txt for pat in amt_patterns)
-                or (utr_number and utr_number in lower_txt)
-                or bool(re.search(r'\b(am|pm)\b', lower_txt))
-                or any(dt in lower_txt for dt in valid_dates)
-            )
-
-            # Rupee symbol '₹' ko exclude karke baaki words ki height compare karein
-            clean_heights = [
-                float(w.get("Height", 10))
-                for w in words
-                if w.get("WordText", "").strip() not in ("₹", "rs", "rs.")
-            ]
-
-            if is_critical_line and len(clean_heights) >= 2:
-                # Check 1: Ek hi line mein font size (Height) bada-chhota hona (safe threshold 1.50)
-                min_h, max_h = min(clean_heights), max(clean_heights)
-                if min_h > 0 and (max_h / min_h) > 1.50:
-                    return "AUTO_REJECT", f"Fake edit detected: Font size mismatch in '{txt}'.", unique_lock_key
-
-                # Check 2: Ek hi line ke words upar-neeche (misaligned) hona
-                if (max(tops) - min(tops)) > 4.0:
-                    return "AUTO_REJECT", f"Fake edit detected: Misaligned text in '{txt}'.", unique_lock_key
-
-            line_boxes.append({"text": txt, "lower": lower_txt, "top": avg_top, "height": avg_h})
-
-        for lb in line_boxes:
-            is_amount_box = any(pat in lb["lower"] for pat in amt_patterns) and ("₹" in lb["text"] or lb["lower"].isdigit() or "." in lb["lower"])
-            if is_amount_box:
-                peers = [o for o in line_boxes if o != lb and (lb["height"] * 0.8) > abs(o["top"] - lb["top"])]
-                for p in peers:
-                    if abs(p["top"] - lb["top"]) > 4.5:
-                        return "AUTO_REJECT", f"Fake edit detected: Amount '{lb['text']}' alignment mismatch.", unique_lock_key
-
         return "AUTO_APPROVE", "Verified: Tanu Das/UPI, Amount, Date/Time & Unique Lock OK.", unique_lock_key
 
     except Exception as e:
