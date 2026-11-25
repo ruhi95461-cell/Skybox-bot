@@ -15,7 +15,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 # =====================================================================
 # 📦 STEP 1: CONFIGURATION & CONFIG BLOCK
 # =====================================================================
-BOT_TOKEN = 8963839676:AAE8PKKT8vO1laI-hAi5TRucdt0F3EMZLIk
+BOT_TOKEN = "8963839676:AAE8PKKT8vO1laI-hAi5TRucdt0F3EMZLIk"
 ADMIN_ID = 8393210427
 UPI_ID = "BHARATPE2Z0D0G3U4Z52337@unitype"
 BOT_USERNAME = "SkyBoxx_bot"
