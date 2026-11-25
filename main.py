@@ -65,6 +65,37 @@ saved_links = {
 } 
 
 # =====================================================================
+# 📦 MANUAL MEDIA TRANSFER COMMAND (ADMIN ONLY)
+# =====================================================================
+@bot.message_handler(commands=['send'])
+def manual_transfer(message):
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    args = message.text.split()
+    if len(args) != 3:
+        bot.reply_to(message, "⚠ *Format:* `/send <user_id> <token>`\n*Example:* `/send 123456789 585f5f2f9ec1`", parse_mode="Markdown")
+        return
+
+    _, uid_str, token = args
+
+    if not uid_str.isdigit() or token not in saved_links:
+        bot.reply_to(message, "❌ *Invalid User ID ya Token!* GitHub par token check karein.", parse_mode="Markdown")
+        return
+
+    target_uid = int(uid_str)
+    status_msg = bot.reply_to(message, f"⏳ *User `{target_uid}` ko media transfer ho raha hai...*", parse_mode="Markdown")
+
+    wait_msg = bot.send_message(
+        target_uid,
+        "<blockquote>🎉 <b>𝗣𝗔𝗬𝗠𝗘𝗡𝗧 𝗩𝗘𝗥𝗜𝗙𝗜𝗘𝗗!</b> ✅\n\n🚀 <b>𝗠𝗲𝗱𝗶𝗮 𝗦𝗲𝗻𝗱𝗶𝗻𝗴...</b>\n⏳ <i>Please wait while your files arrive.</i></blockquote>",
+        parse_mode="HTML"
+    )
+
+    deliver_media(target_uid, token, wait_msg.message_id)
+    bot.edit_message_text(f"✅ *Media Transfer Complete!* User `{target_uid}` ko token `{token}` ki saari files bhej di gayi hain.", message.chat.id, status_msg.message_id, parse_mode="Markdown")
+
+# =====================================================================
 # 📦 STEP 3: FAST CLOUD OCR, ANTI-REPEAT TIME LOCK & VERIFICATION ENGINE
 # =====================================================================
 
