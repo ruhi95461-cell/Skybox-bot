@@ -219,6 +219,8 @@ def analyze_screenshot(image_bytes, expected_amount):
             f"{d0} {m_full} {y4}", f"{d1} {m_full} {y4}",
             f"{m_abbr} {d0}, {y4}", f"{m_abbr} {d1}, {y4}",
             f"{d0}/{m_num}/{y4}", f"{d0}-{m_num}-{y4}",
+            f"{d0} {m_abbr}", f"{d1} {m_abbr}",
+            f"{m_abbr} {d0}", f"{m_abbr} {d1}",
             f"{d0}/{m_num}/{y2}", f"{d0}-{m_num}-{y2}"
         ]
         has_today_date = any(dt in full_text for dt in valid_dates)
